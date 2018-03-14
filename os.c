@@ -25,9 +25,9 @@ struct IPCRequest
 }
 
 typedef enum priority_level {
-    SYSTEM = 0,
-    PERIODIC,
-    RR,
+    SYSTEM = 3,
+    PERIODIC = 2,
+    RR = 1,
 } PRIORITY_LEVEL;
 
 typedef struct ProcessDescriptor 
@@ -41,7 +41,7 @@ typedef struct ProcessDescriptor
    struct Queue *senders_queue; //sender queue
    struct Queue *reply_queue;  //reply queue
    struct ProcessDescriptor *recipient; //recipient of message
-   struct IPCRequest rqs; //IPC request
+   struct IPCRequest rps; //IPC request
    struct ProcessDescriptor *next;
    int arg;
    PRIORITY_LEVEL priority; //The priority of the task
@@ -102,9 +102,9 @@ volatile static unsigned int Tasks;
 
 struct ProcessDescriptor *getProcess(Pid id);
 
-struct Queue *system_procs;
-struct Queue *periodic_procs;
-struct Queue *rr_procs;
+struct Queue *system_queue;
+struct Queue *periodic_queue;
+struct Queue *rr_queue;
 
 /* add process to add of the queue */
 void enqueue(struct Queue *queue, struct ProcessDescriptor *p){
@@ -119,7 +119,7 @@ void enqueue(struct Queue *queue, struct ProcessDescriptor *p){
 }
 
 /* delete the head from a queue */
-static struct ProcessDescriptor *dequeue(struct ProcessQueue *queue)
+static struct ProcessDescriptor *dequeue(struct Queue *queue)
 {  
   struct ProcessDescriptor *p;
 
@@ -137,7 +137,7 @@ static struct ProcessDescriptor *dequeue(struct ProcessQueue *queue)
   return p;
 }
 
-static void RemoveQ(struct ProcessQueue *queue, struct ProcessDescriptor *p)
+static void RemoveQ(struct Queue *queue, struct ProcessDescriptor *p)
 {
   struct ProcessDescriptor *curr, *prev;
 
@@ -214,7 +214,7 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
    /*----END of NEW CODE----*/
 
    p->state = READY;
-
+   
 }
 
 
@@ -241,21 +241,123 @@ static void Kernel_Create_Task( voidfuncptr f )
 }
 
 
+/**
+  * This internal kernel function is the "main" driving loop of this full-served
+  * model architecture. Basically, on OS_Start(), the kernel repeatedly
+  * requests the next user task's next system call and then invokes the
+  * corresponding kernel function on its behalf.
+  *
+  * This is the main loop of our kernel, called by OS_Start().
+  */
+static void Next_Kernel_Request() 
+{
+   Dispatch();  /* select a new task to run */
+
+   while(1) {
+       cp->request = NONE; /* clear its request */
+
+       /* activate this newly selected task */
+       CurrentSp = cp->sp;
+       Exit_Kernel();    /* or CSwitch() */
+
+       /* if this task makes a system call, it will return to here! */
+
+        /* save the Cp's stack pointer */
+       cp->sp = CurrentSp;
+
+       switch(cp->request){
+       case CREATE:
+           Kernel_Create_Task( cp->code );
+           break;
+       case NEXT:
+	   case NONE:
+           /* NONE could be caused by a timer interrupt */
+          cp->state = READY;
+          Dispatch();
+          break;
+       case TERMINATE:
+          /* deallocate all resources used by this task */
+          cp->state = DEAD;
+          Dispatch();
+          break;
+       default:
+          /* Houston! we have a problem here! */
+          break;
+       }
+    } 
+}
+
+
 
 static void Dispatch(){
     /* find the next READY task
     * Note: if there is no READY task, then this will loop forever!.
     */
+    if (cp->state != RUNNING)
+	{
+        if (system_queue.head != NULL)
+		{
+			cp = Dequeue(&system_queue);
+		}else if(periodic_queue.head != NULL){
+            cp = Dequeue(&periodic_queue);
+        }else if(rr_queue.head != NULL){
+            cp = Dequeue(&rr_queue);
+        }else{
+            //idle
+        }
+    }
+    CurrentSp = cp->sp;
+    cp->state = RUNNING;
+}
+
+
+/*================
+  * RTOS  API  and Stubs
+  *================
+  */
+
+/**
+  * This function initializes the RTOS and must be called before any other
+  * system calls.
+  */
+void OS_Init() 
+{
+   int x;
+
+   Tasks = 0;
+   KernelActive = 0;
+   NextP = 0;
+	//Reminder: Clear the memory for the task on creation.
+   for (x = 0; x < MAXTHREAD; x++) {
+      memset(&(Process[x]),0,sizeof(PD));
+      Process[x].state = DEAD;
+   }
+    
+   cp->state = READY;
+}
+
+
+/**
+  * This function starts the RTOS after creating a few tasks.
+  */
+void OS_Start() 
+{   
+   if ( (! KernelActive) && (Tasks > 0)) {
+       Disable_Interrupt();
+      /* we may have to initialize the interrupt vector for Enter_Kernel() here. */
+
+      /* here we go...  */
+      KernelActive = 1;
+      Kernel_main_loop();
+   }
 }
 
 
 //TODO
 PID Task_Create_System(void (*f)(void), int arg){
-    
 }
 
 PID Task_Create_RR(void (*f)(void), int arg){
-    
 }
 
 PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK offset){
@@ -307,6 +409,7 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          //client thread becomes reply blocks
          cp->state = REPLYBLOCKED;
          enqueue(&(receiver->reply_queue), cp);
+         receiver->state = READY;
          Dispatch();
      }else{ /*receiver thread is not ready */
         //the client thread becomes sendblock
@@ -345,7 +448,7 @@ void Msg_Rply(PID id, unsigned int r ){
     sender = getProcess(id);
     if(sender->state == REPLYBLOCKED){
         //current reply to sender
-        RemoveQ(&(sender->rec), sender);
+        RemoveQ(&(sender->reply_queue), sender);
         sender->rps.send.r=r;
         sender->recipient = NULL:
         sender->state = READY;
