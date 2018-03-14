@@ -195,15 +195,20 @@ static void Dispatch()
      /* find the next READY task
        * Note: if there is no READY task, then this will loop forever!.
        */
-   while(Process[NextP].state != READY) {
-      NextP = (NextP + 1) % MAXPROCESS;
+   if(cp->state !=RUNNING){
+       if(SystemProcess.head!=NULL){
+           cp = dequeue(&SystemProcess);
+       }else if(PeriodicProcess.head!=NULL){
+           cp = dequeue(&PeriodicProcess);
+       }else if(RoundRobinProcess.head!=NULL){
+           cp = dequeue(&RoundRobinProcess);
+       }else{
+           //TODO IDLE
+       }
    }
-
-   Cp = &(Process[NextP]);
-   CurrentSp = Cp->sp;
-   Cp->state = RUNNING;
-
-   NextP = (NextP + 1) % MAXPROCESS;
+    
+    CurrentSp = cp ->sp;
+    cp->state = RUNNING;
 }
 
 /********************************************************************************
@@ -241,10 +246,10 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
    p->reply_queue.head = NULL;
    p->reply_queue.tail = NULL;
    p->recipient = NULL;
-   p->rps.send.pid = 0;
-   p->rps.send.v = 0;
-   p->rps.send.r = 0;
-   p->rps.send.t = 0;
+   p->rps.pid = 0;
+   p->rps.v = 0;
+   p->rps.r = 0;
+   p->rps.t = 0;
    Tasks++;
    p->next =NULL; //TODO: put it into ready queue
 }
