@@ -245,7 +245,6 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
    p->senders_queue.tail = NULL;
    p->reply_queue.head = NULL;
    p->reply_queue.tail = NULL;
-   p->recipient = NULL;
    p->rps.pid = 0;
    p->rps.v = 0;
    p->rps.r = 0;
@@ -498,12 +497,10 @@ void Msg_Rply(PID id, unsigned int r ){
     PD *sender;
     //set current cp to sender
     sender = getProcess(id);
-
     if(sender != NULL && InQueue(cp->reply_queue,sender)){
         //current reply to sender
         RemoveQ(cp->reply_queue, sender);
         sender->rps.r=r;
-        sender->recipient = NULL:
         sender->state = READY;
         //TODO sechduler adds sender to Ready queue 
     }
