@@ -4,47 +4,39 @@
 #include "os.h"
 
 
-// A structure to represent a queue
+/********************************************************************************
+*			DATA STRUCTURES
+*********************************************************************************/
+
+
 struct Queue
 {
     struct ProcessDescriptor *head;
     struct ProcessDescriptor *tail;
 }
 
+
 struct IPCRequest
 {
-  union{
-    struct{
-        unsigned PID pid;
-        unsigned int v; //send message
-        unsigned int r; //reply message
-        MTYPE t; //messag type
-        
-    }send,receive,reply;
-  }
+    unsigned PID pid;
+    unsigned int v; //send message
+    unsigned int r; //reply message
+    MTYPE t; //messag type
+    unsigned int status；//TODO: use this to indicate status 0:noop 1:sending 2:receiving 3:response
 }
-
-typedef enum priority_level {
-    SYSTEM = 0,
-    PERIODIC,
-    RR,
-} PRIORITY_LEVEL;
 
 typedef struct ProcessDescriptor 
 {
    unsigned PID pid;    //process id
    unsigned char *sp;   /* stack pointer into the "workSpace" */
    unsigned char workSpace[WORKSPACE]; 
-   ProcessState state;
+   PROCESS_STATES state;
    voidfuncptr  code;   /* function to be executed as a task */
-   kernel_request_type request; //request type
+   KERNEL_REQUEST_TYPE kernel_request; //request type
    struct Queue *senders_queue; //sender queue
    struct Queue *reply_queue;  //reply queue
-   struct ProcessDescriptor *recipient; //recipient of message
-   struct IPCRequest rqs; //IPC request
+   struct IPCRequest rps; //IPC request
    struct ProcessDescriptor *next;
-   int arg;
-   PRIORITY_LEVEL priority; //The priority of the task
 } PD;
 
 typedef enum kernel_request_type 
@@ -58,15 +50,28 @@ typedef enum kernel_request_type
    REPLY
 } KERNEL_REQUEST_TYPE;
 
-enum ProcessState {DEAD, READY, SLEEP, RUNNING, SUSPEND, SENDBLOCKED,
-                   RECEIVEBLOCKED, REPLYBLOCKED};
-
+typedef enum {
+	DEAD, 
+	READY, 
+	RUNNING,
+	SENDBLOCKED,
+    RECEIVEBLOCKED, 
+    REPLYBLOCKED
+}PROCESS_STATES;
 
 /**
   * This table contains ALL process descriptors. It doesn't matter what
   * state a task is in.
   */
 static PD Process[MAXTHREAD];
+
+static Queue SystemProcess;
+static Queue PeriodicProcess;
+static Queue RoundRobinProcess;
+
+volatile static unsigned int NumSysTasks;
+volatile static unsigned int NumPeriodTasks;
+volatile static unsigned int NumRRTasks;
 
 /**
   * The process descriptor of the currently RUNNING task.
@@ -100,18 +105,34 @@ volatile static unsigned int KernelActive;
 volatile static unsigned int Tasks;  
 
 
-struct ProcessDescriptor *getProcess(Pid id);
 
-struct Queue *system_procs;
-struct Queue *periodic_procs;
-struct Queue *rr_procs;
+/********************************************************************************
+*			UTILS
+*********************************************************************************/
+// The calling task gets its initial "argument" when it was created.
+int  Task_GetArg(void){
+    
+}
 
-/* add process to add of the queue */
-void enqueue(struct Queue *queue, struct ProcessDescriptor *p){
+// It returns the calling task's PID.
+PID  Task_Pid(void){
+     return cp->pid;
+}
+
+PD *getProcess(PID id){
+	for(int i=0;i<MAXTHREAD;i++){
+		if(Process[i].pid == id){
+			return &(Process[i]);
+		}
+	}
+	return NULL
+}
+
+void enqueue(struct Queue *queue,char queue_type, struct ProcessDescriptor *p){
     if(queue->head==NULL){
         queue->head = p;
         queue->tail = p;
-        queue->next = NULL;
+        p->next = NULL;
     }else{
         queue->tail->next = p;
         queue->tail = p;
@@ -141,7 +162,7 @@ static void RemoveQ(struct ProcessQueue *queue, struct ProcessDescriptor *p)
 {
   struct ProcessDescriptor *curr, *prev;
 
-  if(queue->head==NULL) return;     /* empty queue */
+  if(queue->head ==NULL) return;     /* empty queue */
   if(queue->head == p){         /* head of queue */
         queue->head = p->next;
         p->next = NULL;
@@ -160,30 +181,43 @@ static void RemoveQ(struct ProcessQueue *queue, struct ProcessDescriptor *p)
   if (queue->head == NULL) queue->tail = NULL;
 }
 
+static Boolean InQueue(struct ProcessQueue *queue, struct ProcessDescriptor *p){
+	struct ProcessDescriptor *curr = queue->head;
+	while(curr != NULL){
+		if(curr == p) return true;
+		curr = curr->next;
+	}
+	return false;
+}
 
-/**Kernel Codd**/
+static void Dispatch()
+{
+     /* find the next READY task
+       * Note: if there is no READY task, then this will loop forever!.
+       */
+   while(Process[NextP].state != READY) {
+      NextP = (NextP + 1) % MAXPROCESS;
+   }
+
+   Cp = &(Process[NextP]);
+   CurrentSp = Cp->sp;
+   Cp->state = RUNNING;
+
+   NextP = (NextP + 1) % MAXPROCESS;
+}
+
+/********************************************************************************
+*			OS (Kernel methods)
+*********************************************************************************/
 void Kernel_Create_Task_At( PD *p, voidfuncptr f ) 
 {   
    unsigned char *sp;
 
-#ifdef DEBUG
-   int counter = 0;
-#endif
-
    //Changed -2 to -1 to fix off by one error.
    sp = (unsigned char *) &(p->workSpace[WORKSPACE-1]);
 
-   /*----BEGIN of NEW CODE----*/
-   //Initialize the workspace (i.e., stack) and PD here!
-
    //Clear the contents of the workspace
    memset(&(p->workSpace),0,WORKSPACE);
-
-   //Notice that we are placing the address (16-bit) of the functions
-   //onto the stack in reverse byte order (least significant first, followed
-   //by most significant).  This is because the "return" assembly instructions 
-   //(rtn and rti) pop addresses off in BIG ENDIAN (most sig. first, least sig. 
-   //second), even though the AT90 is LITTLE ENDIAN machine.
 
    //Store terminate at the bottom of stack to protect against stack underrun.
    *(unsigned char *)sp-- = ((unsigned int)Task_Terminate) & 0xff;
@@ -195,57 +229,172 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
    *(unsigned char *)sp-- = (((unsigned int)f) >> 8) & 0xff;
    *(unsigned char *)sp-- = 0x00;
 
-#ifdef DEBUG
-   //Fill stack with initial values for development debugging
-   //Registers 0 -> 31 and the status register
-   for (counter = 0; counter < 33; counter++)
-   {
-      *(unsigned char *)sp-- = counter;
-   }
-#else
    //Place stack pointer at top of stack
    sp = sp - 34;
-#endif
-      
+   
    p->sp = sp;		/* stack pointer into the "workSpace" */
    p->code = f;		/* function to be executed as a task */
-   p->request = NONE;
-
-   /*----END of NEW CODE----*/
-
+   p->kernel_request = NONE;
    p->state = READY;
-
+   p->senders_queue.head = NULL;
+   p->senders_queue.tail = NULL;
+   p->reply_queue.head = NULL;
+   p->reply_queue.tail = NULL;
+   p->recipient = NULL;
+   p->rps.send.pid = 0;
+   p->rps.send.v = 0;
+   p->rps.send.r = 0;
+   p->rps.send.t = 0;
+   Tasks++;
+   p->next =NULL; //TODO: put it into ready queue
 }
 
-
-/**
-  *  Create a new task
-  */
 static void Kernel_Create_Task( voidfuncptr f ) 
 {
    int x;
 
-   if (Tasks >= MAXTHREAD) return;  /* Too many task! */
+   if (Tasks == MAXPROCESS) return;  /* Too many task! */
 
    /* find a DEAD PD that we can use  */
-   for (x = 0; x < MAXTHREAD; x++) {
+   for (x = 0; x < MAXPROCESS; x++) {
        if (Process[x].state == DEAD) break;
    }
 
-   if(x<MAXTHREAD){
-       ++Tasks;
-       Kernel_Create_Task_At( &(Process[x]), f );
+   ++Tasks;
+   Kernel_Create_Task_At( &(Process[x]), f );
+
+}
+
+/**
+  * This internal kernel function is the "main" driving loop of this full-served
+  * model architecture. Basically, on OS_Start(), the kernel repeatedly
+  * requests the next user task's next system call and then invokes the
+  * corresponding kernel function on its behalf.
+  *
+  * This is the main loop of our kernel, called by OS_Start().
+  */
+static void Next_Kernel_Request() 
+{
+   Dispatch();  /* select a new task to run */
+
+   while(1) {
+       Cp->request = NONE; /* clear its request */
+
+       /* activate this newly selected task */
+       CurrentSp = Cp->sp;
+       Exit_Kernel();    /* or CSwitch() */
+
+       /* if this task makes a system call, it will return to here! */
+
+        /* save the Cp's stack pointer */
+       Cp->sp = CurrentSp;
+
+       switch(Cp->request){
+       case CREATE:
+           Kernel_Create_Task( Cp->code );
+           break;
+       case NEXT:
+	   case NONE:
+           /* NONE could be caused by a timer interrupt */
+          Cp->state = READY;
+          Dispatch();
+          break;
+       case TERMINATE:
+          /* deallocate all resources used by this task */
+          Cp->state = DEAD;
+          Dispatch();
+          break;
+       default:
+          /* Houston! we have a problem here! */
+          break;
+       }
+    } 
+}
+
+/*================
+  * RTOS  API  and Stubs
+  *================
+  */
+
+/**
+  * This function initializes the RTOS and must be called before any other
+  * system calls.
+  */
+void OS_Init() 
+{
+   int x;
+
+   Tasks = 0;
+   KernelActive = 0;
+   NextP = 0;
+	//Reminder: Clear the memory for the task on creation.
+   for (x = 0; x < MAXPROCESS; x++) {
+      memset(&(Process[x]),0,sizeof(PD));
+      Process[x].state = DEAD;
+      Process[x].pid = x+1;
    }
-   
-  
 }
 
 
+/**
+  * This function starts the RTOS after creating a few tasks.
+  */
+void OS_Start() 
+{   
+   if ( (! KernelActive) && (Tasks > 0)) {
+       Disable_Interrupt();
+      /* we may have to initialize the interrupt vector for Enter_Kernel() here. */
 
-static void Dispatch(){
-    /* find the next READY task
-    * Note: if there is no READY task, then this will loop forever!.
-    */
+      /* here we go...  */
+      KernelActive = 1;
+      Next_Kernel_Request();
+      /* NEVER RETURNS!!! */
+   }
+}
+
+
+/**
+  * For this example, we only support cooperatively multitasking, i.e.,
+  * each task gives up its share of the processor voluntarily by calling
+  * Task_Next().
+  */
+void Task_Create( voidfuncptr f)
+{
+   if (KernelActive ) {
+     Disable_Interrupt();
+     Cp ->request = CREATE;
+     Cp->code = f;
+     Enter_Kernel();
+   } else { 
+      /* call the RTOS function directly */
+      Kernel_Create_Task( f );
+   }
+}
+
+/**
+  * The calling task gives up its share of the processor voluntarily.
+  */
+void Task_Next() 
+{
+   if (KernelActive) {
+     Disable_Interrupt();
+     Cp ->request = NEXT;
+     Enter_Kernel();
+  }
+}
+
+
+/**
+  * The calling task terminates itself.
+  */
+void Task_Terminate() 
+{
+   if (KernelActive) {
+      Disable_Interrupt();
+      Cp -> request = TERMINATE;
+      Enter_Kernel();
+     /* never returns here! */
+   }
 }
 
 
@@ -263,29 +412,14 @@ PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK of
 }
 
 void Task_Next(void){
-     
+    
 }
 
 
-// The calling task gets its initial "argument" when it was created.
-int  Task_GetArg(void){
-     return cp->arg;
-}
 
-// It returns the calling task's PID.
-PID  Task_Pid(void){
-     return cp->pid;
-}
-
-struct ProcessDescriptor *getProcess(Pid id){
-    unsigned int i;
-    if(id>0){
-        i=(id-1)%MAXTHREAD;
-        return &(Process[i]);
-    }
-    return NULL;
-}
-
+/********************************************************************************
+*			IPC SRR
+*********************************************************************************/
 
 /****IPC*****/
 //client thread
@@ -299,15 +433,17 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
      //current process recipient to receiver
      cp->recipient = receiver；
      if(receiver->state==RECEIVEBLOCKED){
-         receiver->rps.receive.pid = Task_Pid();
+         receiver->rps.pid = Task_Pid();
          //message sent, receiver picks up message v
-         receiver->rps.receive.v = v;
+         receiver->rps.v = v;
          //message type
-         receiver->rps.receive.t = t;
+         receiver->rps.t = t;
          //client thread becomes reply blocks
          cp->state = REPLYBLOCKED;
+         receiver->state=READY;
          enqueue(&(receiver->reply_queue), cp);
-         Dispatch();
+         // TODO: add receiver back to ready queue
+         dispatch();
      }else{ /*receiver thread is not ready */
         //the client thread becomes sendblock
          cp->state = SENDBLOCKED;
@@ -318,56 +454,70 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
      
 }
 
+void filter_unwantted_requests_for_msg_recv(struct ProcessQueue *queue, MASK m){
+	struct ProcessDescriptor *curr = queue->head;
+	while(curr !=NULL){
+		struct ProcessDescriptor *tmp = curr;
+		curr = curr->next;
+		// remove requests that we don't want
+		if(((unsigned int)tmp->rps.send.t & (unsigned int)m) == 0b00000000){
+			RemoveQ(queue,tmp);
+		}
+	}
+}
+
 PID  Msg_Recv(MASK m, unsigned int *v ){
       struct PD *first_sender;
+      filter_unwantted_requests_for_msg_recv(&(cp->senders_queue),m);
       first_sender = dequeue(&(cp->senders_queue));
+
       //no client thread has done sent
-      if(first_sender == NULL || ((unsigned int)first_sender->rps.send.t) & (unsigned int)m ==0b00000000){
+      if(first_sender == NULL){
          cp->state = RECEIVEBLOCKED;
          Dispatch();
-         return &(cp->rps.send.pid);
+         return &(cp->rps.pid);
       }else{
          first_sender->state=REPLYBLOCKED;
          //add to reply queue 
          enqueue(&(cp->reply_queue), first_sender);
          //check sender message type and MASK
-         cp->rps.receive.pid = first_sender->pid;
-         cp->rps.receive.v = first_sender->rps.send.v;
-         cp->rps.receive.t = first_sender->rps.send.t;
-         return  &(cp->rps.receive.pid);
+         cp->rps.pid = first_sender->pid;
+         cp->rps.v = first_sender->rps.v;
+         cp->rps.t = first_sender->rps.t;
+         return  &(first_sender->pid);
       }
      
 }
 
 void Msg_Rply(PID id, unsigned int r ){
-    struct PD *sender;
+    PD *sender;
     //set current cp to sender
     sender = getProcess(id);
-    if(sender->state == REPLYBLOCKED){
+
+    if(sender != NULL && InQueue(cp->reply_queue,sender)){
         //current reply to sender
-        RemoveQ(&(sender->rec), sender);
-        sender->rps.send.r=r;
+        RemoveQ(cp->reply_queue, sender);
+        sender->rps.r=r;
         sender->recipient = NULL:
         sender->state = READY;
         //TODO sechduler adds sender to Ready queue 
-        Dispatch();
     }
 }
 
 //Asynchronous Communication
 void Msg_ASend(PID id, MTYPE t, unsigned int v ){
-     struct PD *receiver;
+     PD *receiver;
      receiver = getProcess(id);
      if(receiver==NULL){
          return;
      }
      //if p is waiting on receive
      if(receiver-->state==RECEIVEBLOCKED){
-         receiver->rps.receive.pid = id;
+         receiver->rps.pid = id;
          //message sent, receiver picks up message v
-         receiver->rps.receive.v = v;
+         receiver->rps.v = v;
          //message type
-         receiver->rps.receive.t = t;
+         receiver->rps.t = t;
          //dont have to wait for reply
      }else{
          Dispatch();
