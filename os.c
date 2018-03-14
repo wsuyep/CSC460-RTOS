@@ -13,21 +13,21 @@ struct Queue
 {
     struct ProcessDescriptor *head;
     struct ProcessDescriptor *tail;
-}
+};
 
 
 struct IPCRequest
 {
-    unsigned PID pid;
+    PID pid;
     unsigned int v; //send message
     unsigned int r; //reply message
     MTYPE t; //messag type
-    unsigned int status；//TODO: use this to indicate status 0:noop 1:sending 2:receiving 3:response
-}
+    unsigned int status;//TODO: use this to indicate status 0:noop 1:sending 2:receiving 3:response
+};
 
 typedef struct ProcessDescriptor 
 {
-   unsigned PID pid;    //process id
+   PID pid;    //process id
    unsigned char *sp;   /* stack pointer into the "workSpace" */
    unsigned char workSpace[WORKSPACE]; 
    PROCESS_STATES state;
@@ -44,7 +44,7 @@ typedef enum kernel_request_type
    NONE = 0,
    CREATE,
    NEXT,
-   TERMINATE
+   TERMINATE,
    SEND, 
    RECEIVE, 
    REPLY
@@ -125,7 +125,7 @@ PD *getProcess(PID id){
 			return &(Process[i]);
 		}
 	}
-	return NULL
+	return NULL;
 }
 
 void enqueue(struct Queue *queue, struct ProcessDescriptor *p){
@@ -174,7 +174,7 @@ static void RemoveQ(struct ProcessQueue *queue, struct ProcessDescriptor *p)
                 curr = curr->next;
         }        
         if(curr == p) {         /* found it */
-                prev->next = curr->next;
+                prev->next = p->next;
                 p->next = NULL;
         }
   }
@@ -434,8 +434,7 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
      if(receiver==NULL){
          return;
      }
-     //current process recipient to receiver
-     cp->recipient = receiver；
+
      if(receiver->state==RECEIVEBLOCKED){
          receiver->rps.pid = Task_Pid();
          //message sent, receiver picks up message v
