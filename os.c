@@ -2,193 +2,36 @@
 #include <avr/interrupt.h>
 
 #include "os.h"
-
+#include "kernel.h"
+#include "util.h"
 
 /********************************************************************************
-*			DATA STRUCTURES
+*			G L O B A L    V A R I A B L E S
 *********************************************************************************/
-
-
-struct Queue
-{
-    struct ProcessDescriptor *head;
-    struct ProcessDescriptor *tail;
-};
-
-
-struct IPCRequest
-{
-    PID pid;
-    unsigned int v; //send message
-    unsigned int r; //reply message
-    MTYPE t; //messag type
-    unsigned int status;//TODO: use this to indicate status 0:noop 1:sending 2:receiving 3:response
-};
-
-typedef struct ProcessDescriptor 
-{
-   PID pid;    //process id
-   unsigned char *sp;   /* stack pointer into the "workSpace" */
-   unsigned char workSpace[WORKSPACE]; 
-   PROCESS_STATES state;
-   voidfuncptr  code;   /* function to be executed as a task */
-   KERNEL_REQUEST_TYPE kernel_request; //request type
-   struct Queue *senders_queue; //sender queue
-   struct Queue *reply_queue;  //reply queue
-   struct IPCRequest rps; //IPC request
-   struct ProcessDescriptor *next;
-} PD;
-
-typedef enum kernel_request_type 
-{
-   NONE = 0,
-   CREATE,
-   NEXT,
-   TERMINATE,
-   SEND, 
-   RECEIVE, 
-   REPLY
-} KERNEL_REQUEST_TYPE;
-
-typedef enum {
-	DEAD, 
-	READY, 
-	RUNNING,
-	SENDBLOCKED,
-    RECEIVEBLOCKED, 
-    REPLYBLOCKED
-}PROCESS_STATES;
-
-/**
-  * This table contains ALL process descriptors. It doesn't matter what
-  * state a task is in.
-  */
 static PD Process[MAXTHREAD];
 
 static Queue SystemProcess;
 static Queue PeriodicProcess;
 static Queue RoundRobinProcess;
+static Queue DeadPool;
 
 volatile static unsigned int NumSysTasks;
 volatile static unsigned int NumPeriodTasks;
 volatile static unsigned int NumRRTasks;
+volatile static unsigned int Tasks;
 
-/**
-  * The process descriptor of the currently RUNNING task.
-  */
-volatile static PD* cp; 
+volatile static PD* cp;
 
-/** 
-  * Since this is a "full-served" model, the kernel is executing using its own
-  * stack. We can allocate a new workspace for this kernel stack, or we can
-  * use the stack of the "main()" function, i.e., the initial C runtime stack.
-  * (Note: This and the following stack pointers are used primarily by the
-  *   context switching code, i.e., CSwitch(), which is written in assembly
-  *   language.)
-  */         
 volatile unsigned char *KernelSp;
-
-/**
-  * This is a "shadow" copy of the stack pointer of "Cp", the currently
-  * running task. During context switching, we need to save and restore
-  * it into the appropriate process descriptor.
-  */
 volatile unsigned char *CurrentSp;
 
-/** index to next task to run */
-volatile static unsigned int NextP;  
+volatile static unsigned int NextP;
 
-/** 1 if kernel has been started; 0 otherwise. */
-volatile static unsigned int KernelActive;  
-
-/** number of tasks created so far */
-volatile static unsigned int Tasks;  
-
-
+volatile static unsigned int KernelActive;
 
 /********************************************************************************
-*			UTILS
+*			OS (Kernel methods)
 *********************************************************************************/
-// The calling task gets its initial "argument" when it was created.
-int  Task_GetArg(void){
-    
-}
-
-// It returns the calling task's PID.
-PID  Task_Pid(void){
-     return cp->pid;
-}
-
-PD *getProcess(PID id){
-	for(int i=0;i<MAXTHREAD;i++){
-		if(Process[i].pid == id){
-			return &(Process[i]);
-		}
-	}
-	return NULL;
-}
-
-void enqueue(struct Queue *queue, struct ProcessDescriptor *p){
-    if(queue->head==NULL){
-        queue->head = p;
-        queue->tail = p;
-        p->next = NULL;
-    }else{
-        queue->tail->next = p;
-        queue->tail = p;
-    }
-}
-
-/* delete the head from a queue */
-static struct ProcessDescriptor *dequeue(struct ProcessQueue *queue)
-{  
-  struct ProcessDescriptor *p;
-
-  if (queue->head == NULL) return NULL; /* empty queue, return NULL */
-
-  p = queue->head;
-  queue->head = p->next;
-
-  if (queue->head == NULL) /* p is the last process of that queue */
-    queue->tail = NULL;
-
-  p->next = NULL;      /* make sure p->next is not pointing *
-                        * to some other processes           */
-
-  return p;
-}
-
-static void RemoveQ(struct ProcessQueue *queue, struct ProcessDescriptor *p)
-{
-  struct ProcessDescriptor *curr, *prev;
-
-  if(queue->head ==NULL) return;     /* empty queue */
-  if(queue->head == p){         /* head of queue */
-        queue->head = p->next;
-        p->next = NULL;
-  } else {                      /* search remaining queue */
-        prev = queue->head;
-        curr = prev->next;
-        while(curr != NULL && curr != p){
-                prev = curr;
-                curr = curr->next;
-        }        
-        if(curr == p) {         /* found it */
-                prev->next = p->next;
-                p->next = NULL;
-        }
-  }
-  if (queue->head == NULL) queue->tail = NULL;
-}
-
-static Boolean InQueue(struct ProcessQueue *queue, struct ProcessDescriptor *p){
-	struct ProcessDescriptor *curr = queue->head;
-	while(curr != NULL){
-		if(curr == p) return true;
-		curr = curr->next;
-	}
-	return false;
-}
 
 static void Dispatch()
 {
@@ -213,10 +56,7 @@ static void Dispatch()
     cp->state = RUNNING;
 }
 
-/********************************************************************************
-*			OS (Kernel methods)
-*********************************************************************************/
-void Kernel_Create_Task_At( PD *p, voidfuncptr f ) 
+void Kernel_Create_Task_At( PD *p, voidfuncptr f )
 {   
    unsigned char *sp;
 
@@ -251,6 +91,7 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
    p->rps.v = 0;
    p->rps.r = 0;
    p->rps.t = 0;
+   p->rps.status=0;
    Tasks++;
    p->next =NULL; //TODO: put it into ready queue
 }
@@ -321,30 +162,23 @@ static void Next_Kernel_Request()
   * RTOS  API  and Stubs
   *================
   */
-
-/**
-  * This function initializes the RTOS and must be called before any other
-  * system calls.
-  */
 void OS_Init() 
 {
    int x;
-
    Tasks = 0;
    KernelActive = 0;
    NextP = 0;
-	//Reminder: Clear the memory for the task on creation.
-   for (x = 0; x < MAXPROCESS; x++) {
+   for (x = 0; x < MAXTHREAD; x++) {
       memset(&(Process[x]),0,sizeof(PD));
       Process[x].state = DEAD;
       Process[x].pid = x+1;
+      Process[x].next = &(Process[x+1]);
+      enqueue(&DeadPool,&(Process[x]));
    }
+   
+
 }
 
-
-/**
-  * This function starts the RTOS after creating a few tasks.
-  */
 void OS_Start() 
 {   
    if ( (! KernelActive) && (Tasks > 0)) {
