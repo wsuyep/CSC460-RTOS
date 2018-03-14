@@ -195,18 +195,20 @@ static void Dispatch()
      /* find the next READY task
        * Note: if there is no READY task, then this will loop forever!.
        */
-   if(cp->state !=RUNNING){
+    while(1){
        if(SystemProcess.head!=NULL){
            cp = dequeue(&SystemProcess);
+           break;
        }else if(PeriodicProcess.head!=NULL){
            cp = dequeue(&PeriodicProcess);
+           break;
        }else if(RoundRobinProcess.head!=NULL){
            cp = dequeue(&RoundRobinProcess);
+           break;
        }else{
            //TODO IDLE
        }
-   }
-    
+    }
     CurrentSp = cp ->sp;
     cp->state = RUNNING;
 }
