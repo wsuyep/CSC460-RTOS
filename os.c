@@ -59,15 +59,20 @@ typedef enum {
     REPLYBLOCKED
 }PROCESS_STATES;
 
+typedef enum priority_level {
+    SYSTEM = 0,
+    PERIODIC,
+    RR,
+} PRIORITY_LEVEL;
 /**
   * This table contains ALL process descriptors. It doesn't matter what
   * state a task is in.
   */
 static PD Process[MAXTHREAD];
 
-static Queue SystemProcess;
-static Queue PeriodicProcess;
-static Queue RoundRobinProcess;
+static struct Queue SystemProcess;
+static struct Queue PeriodicProcess;
+static struct Queue RoundRobinProcess;
 
 volatile static unsigned int NumSysTasks;
 volatile static unsigned int NumPeriodTasks;
