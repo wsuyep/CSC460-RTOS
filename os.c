@@ -13,6 +13,7 @@ static PD Process[MAXTHREAD];
 static Queue SystemProcess;
 static Queue PeriodicProcess;
 static Queue RoundRobinProcess;
+static Queue DeadPool;
 
 volatile static unsigned int NumSysTasks;
 volatile static unsigned int NumPeriodTasks;
@@ -168,7 +169,11 @@ void OS_Init()
       memset(&(Process[x]),0,sizeof(PD));
       Process[x].state = DEAD;
       Process[x].pid = x+1;
+      Process[x].next = &(Process[x+1]);
+      enqueue(&DeadPool,&(Process[x]));
    }
+   
+
 }
 
 void OS_Start() 

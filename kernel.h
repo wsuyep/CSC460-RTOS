@@ -13,6 +13,12 @@ struct Queue
     struct ProcessDescriptor *tail;
 };
 
+typedef enum priority_level {
+    SYSTEM = 3,
+    PERIODIC = 2,
+    RR = 1,
+} PRIORITY_LEVEL;
+
 struct IPCRequest
 {
     PID pid;
@@ -34,6 +40,10 @@ typedef struct ProcessDescriptor
     struct Queue *reply_queue;  //reply queue
     struct IPCRequest rps; //IPC request
     struct ProcessDescriptor *next;
+    PRIORITY_LEVEL priority; //The priority of the task
+    unsigned int wcet;
+    unsigned int period;
+    unsigned int offset;
 } PD;
 
 typedef enum kernel_request_type
