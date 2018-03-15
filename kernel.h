@@ -41,9 +41,9 @@ typedef struct ProcessDescriptor
     struct IPCRequest rps; //IPC request
     struct ProcessDescriptor *next;
     PRIORITY_LEVEL priority; //The priority of the task
-    unsigned int wcet;
-    unsigned int period;
-    unsigned int offset;
+    TICK wcet;
+    TICK period;
+    TICK offset;
 } PD;
 
 typedef enum kernel_request_type
