@@ -65,6 +65,32 @@ PD *getProcess(PID id){
 /********************************************************************************
 *			OS (Kernel methods)
 *********************************************************************************/
+
+void setupTimer(){
+    cli();
+    //clear timer config
+    TCCR4A = 0;
+    TCCR4B = 0;
+
+    //set to CTC
+    TCCR4B |=(1<<WGM42);
+
+    //set prescaller to 256
+    TCCR4B |=(1<<CS42);
+
+    //set Top value
+    OCR4A = 625;
+
+    //Enable interupt A for timer 3
+    TIMSK4 |= (1<<OCIE4A);
+
+    //set timer to 0
+    TCNT4 = 0;
+
+    sei();
+
+}
+
 static void PutBackToReadyQueue(PD* p){
    switch(p->priority){
       case SYSTEM:
@@ -395,28 +421,32 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
      //else not op
 }
 
+/********************************************************************************
+*			T E S T    C O D E
+*********************************************************************************/
+
+ISR(TIMER4_COMPA_vect){
+
+  if (KernelActive) {
+     cp ->kernel_request = NEXT;
+     Enter_Kernel();
+   }
+}
+
 void Blink()
 {
   while(1){
     PORTB=0x01;
-    lcd_xy(0,0);
-    lcd_puts((void*)"TASK1");
-    lcd_xy(0,1);
-    lcd_puts((void*)"     ");
-	_delay_ms(2000);
-    Task_Next();
+	//_delay_ms(2000);
+    //Task_Next();
   }
 }
 void Blink2()
 {
   while(1){
     PORTB=0x02;
-    lcd_xy(0,0);
-    lcd_puts((void*)"     ");
-    lcd_xy(0,1);
-    lcd_puts((void*)"TASK2");
-    _delay_ms(2000);
-    Task_Next();
+    //_delay_ms(2000);
+    //Task_Next();
   }
 }
 
@@ -426,6 +456,7 @@ int main()
    DDRB=0x83;
    lcd_init();
    lcd_xy(0,0);
+   setupTimer();
    OS_Init();
    Task_Create_System( Blink ,1);
    Task_Create_System( Blink2,1 );
