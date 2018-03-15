@@ -5,6 +5,9 @@
 #include "kernel.h"
 #include "util.h"
 
+#define Disable_Interrupt()		asm volatile ("cli"::)
+#define Enable_Interrupt()		asm volatile ("sei"::)
+
 /********************************************************************************
 *			G L O B A L    V A R I A B L E S
 *********************************************************************************/
@@ -32,6 +35,21 @@ volatile static unsigned int KernelActive;
 /********************************************************************************
 *			OS (Kernel methods)
 *********************************************************************************/
+static void PutBackToReadyQueue(PD* p){
+   switch(p->priority){
+      case SYSTEM:
+         enqueue(&SystemProcess,p);
+         break;
+      case PERIODIC:
+         enqueue(&PeriodicProcess,p);
+         break;
+      case RR:
+         enqueue(&RoundRobinProcess,p);
+         break;
+      default:
+         //TODO: abort
+   }
+}
 
 static void Dispatch()
 {
@@ -43,7 +61,7 @@ static void Dispatch()
            cp = dequeue(&SystemProcess);
            break;
        }else if(PeriodicProcess.head!=NULL){
-           cp = dequeue(&PeriodicProcess);
+           //TODO
            break;
        }else if(RoundRobinProcess.head!=NULL){
            cp = dequeue(&RoundRobinProcess);
@@ -82,82 +100,18 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
    p->sp = sp;		/* stack pointer into the "workSpace" */
    p->code = f;		/* function to be executed as a task */
    p->kernel_request = NONE;
-   p->state = READY;
-   p->senders_queue.head = NULL;
-   p->senders_queue.tail = NULL;
-   p->reply_queue.head = NULL;
-   p->reply_queue.tail = NULL;
+   InitQueue(p->senders_queue);
+   InitQueue(p->reply_queue);
    p->rps.pid = 0;
    p->rps.v = 0;
    p->rps.r = 0;
    p->rps.t = 0;
    p->rps.status=0;
    Tasks++;
-   p->next =NULL; //TODO: put it into ready queue
+   p->next =NULL;
+   p->state = READY;   //TODO: put it into ready queue
+   PutBackToReadyQueue(p);
 }
-
-static void Kernel_Create_Task( voidfuncptr f ) 
-{
-   int x;
-
-   if (Tasks == MAXPROCESS) return;  /* Too many task! */
-
-   /* find a DEAD PD that we can use  */
-   for (x = 0; x < MAXPROCESS; x++) {
-       if (Process[x].state == DEAD) break;
-   }
-
-   ++Tasks;
-   Kernel_Create_Task_At( &(Process[x]), f );
-
-}
-
-/**
-  * This internal kernel function is the "main" driving loop of this full-served
-  * model architecture. Basically, on OS_Start(), the kernel repeatedly
-  * requests the next user task's next system call and then invokes the
-  * corresponding kernel function on its behalf.
-  *
-  * This is the main loop of our kernel, called by OS_Start().
-  */
-static void Next_Kernel_Request() 
-{
-   Dispatch();  /* select a new task to run */
-
-   while(1) {
-       cp->request = NONE; /* clear its request */
-
-       /* activate this newly selected task */
-       CurrentSp = cp->sp;
-       Exit_Kernel();    /* or CSwitch() */
-
-       /* if this task makes a system call, it will return to here! */
-
-        /* save the Cp's stack pointer */
-       cp->sp = CurrentSp;
-
-       switch(cp->request){
-       case CREATE:
-           Kernel_Create_Task( cp->code, cp->priority);
-           break;
-       case NEXT:
-	   case NONE:
-           /* NONE could be caused by a timer interrupt */
-          Cp->state = READY;
-          Dispatch();
-          break;
-       case TERMINATE:
-          /* deallocate all resources used by this task */
-          Cp->state = DEAD;
-          Dispatch();
-          break;
-       default:
-          /* Houston! we have a problem here! */
-          break;
-       }
-    } 
-}
-
 
 /*================
   * RTOS  API  and Stubs
@@ -169,6 +123,12 @@ void OS_Init()
    Tasks = 0;
    KernelActive = 0;
    NextP = 0;
+
+   InitQueue(&SystemProcess);
+   InitQueue(&PeriodicProcess);
+   InitQueue(&RoundRobinProcess);
+   InitQueue(&DeadPool);
+
    for (x = 0; x < MAXTHREAD; x++) {
       memset(&(Process[x]),0,sizeof(PD));
       Process[x].state = DEAD;
@@ -176,8 +136,6 @@ void OS_Init()
       Process[x].next = &(Process[x+1]);
       enqueue(&DeadPool,&(Process[x]));
    }
-   
-
 }
 
 void OS_Start() 
@@ -193,113 +151,110 @@ void OS_Start()
    }
 }
 
-
 /**
-  * For this example, we only support cooperatively multitasking, i.e.,
-  * each task gives up its share of the processor voluntarily by calling
-  * Task_Next().
+  * This internal kernel function is the "main" driving loop of this full-served
+  * model architecture. Basically, on OS_Start(), the kernel repeatedly
+  * requests the next user task's next system call and then invokes the
+  * corresponding kernel function on its behalf.
+  *
+  * This is the main loop of our kernel, called by OS_Start().
   */
-void Task_Create( voidfuncptr f)
+static void Next_Kernel_Request()
 {
-   if (KernelActive ) {
-     Disable_Interrupt();
-     Cp ->request = CREATE;
-     Cp->code = f;
-     Enter_Kernel();
-   } else { 
-      /* call the RTOS function directly */
-      Kernel_Create_Task( f );
+   Dispatch();  /* select a new task to run */
+
+   while(1) {
+      cp->request = NONE; /* clear its request */
+
+      /* activate this newly selected task */
+      CurrentSp = cp->sp;
+      Exit_Kernel();    /* or CSwitch() */
+
+      /* if this task makes a system call, it will return to here! */
+
+      /* save the cp's stack pointer */
+      cp->sp = CurrentSp;
+
+      switch(cp->request){
+         case NEXT:
+         case NONE:
+            /* NONE could be caused by a timer interrupt */
+            cp->state = READY; //TODO: put it back to ready queue
+            Dispatch();
+            break;
+         case TERMINATE:
+            /* deallocate all resources used by this task */
+            cp->state = DEAD;
+            Dispatch();
+            break;
+         default:
+            /* Houston! we have a problem here! */
+            //TODO: abort
+            break;
+      }
    }
+}
+
+PID Task_Create_System(void (*f)(void), int arg){
+   if (Tasks == MAXPROCESS || DeadPool.head == NULL) return 0;
+   Disable_Interrupt();
+   new_p = dequeue(&DeadPool);
+   new_p->priority = SYSTEM;
+   new_p->arg = arg;
+   Kernel_Create_Task_At( new_p, f );
+   Enable_Interrupt();
+   return new_p.pid;
+}
+
+PID Task_Create_RR(void (*f)(void), int arg){
+   if (Tasks == MAXPROCESS || DeadPool.head == NULL) return 0;
+   Disable_Interrupt();
+   new_p = dequeue(&DeadPool);
+   new_p->priority = RR;
+   new_p->arg = arg;
+   Kernel_Create_Task_At( new_p, f );
+   Enable_Interrupt();
+   return new_p.pid;
+}
+
+PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK offset){
+   if (Tasks == MAXPROCESS || DeadPool.head == NULL) return 0;
+   Disable_Interrupt();
+   new_p = dequeue(&DeadPool);
+   new_p->priority = PERIODIC;
+   new_p->arg = arg;
+   new_p->wcet = wcet;
+   new_p->period = period;
+   new_p->offset = offset;
+   Kernel_Create_Task_At( new_p, f );
+   Enable_Interrupt();
+   return new_p.pid;
 }
 
 /**
   * The calling task gives up its share of the processor voluntarily.
   */
-void Task_Next() 
+void Task_Next()
 {
    if (KernelActive) {
-     Disable_Interrupt();
-     Cp ->request = NEXT;
-     Enter_Kernel();
-  }
+      Disable_Interrupt();
+      cp ->request = NEXT;
+      Enter_Kernel();
+   }
 }
-
 
 /**
   * The calling task terminates itself.
   */
-void Task_Terminate() 
+void Task_Terminate()
 {
    if (KernelActive) {
       Disable_Interrupt();
-      Cp -> request = TERMINATE;
+      cp -> request = TERMINATE;
       Enter_Kernel();
-     /* never returns here! */
+      /* never returns here! */
    }
 }
-
-
-//TODO
-PID Task_Create_System(void (*f)(void), int arg){
-    
-    cp = dequeue(&DeadPool);
-    
-    if(KernelActive){
-       Disable_Interrupt();
-       cp->code = f;
-       //3
-       cp->priority = SYSTEM;
-       cp->arg = arg; 
-       cp->kernel_request = CREATE;
-       Kernel_Create_Task_At(cp, f);
-    }else{
-       //TODO change later
-       Kernel_Create_Task(f);
-    }
-    return (PID)cp->pid;
-}
-
-PID Task_Create_RR(void (*f)(void), int arg){
-    cp = dequeue(&DeadPool);
-    
-    if(KernelActive){
-       Disable_Interrupt();
-       cp->code = f;
-       //3
-       cp->priority = RR;
-       cp->arg = arg; 
-       cp->kernel_request = CREATE;
-       Kernel_Create_Task_At(cp, f);
-    }else{
-       //TODO change later
-       Kernel_Create_Task(f);
-    }
-    return (PID)cp->pid;
-    
-}
-
-PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK offset){
-    cp = dequeue(&DeadPool);
-    if(KernelActive){
-       Disable_Interrupt();
-       cp->code = f;
-       //3
-       cp->priority = PERIODIC;
-       cp->arg = arg; 
-       cp->kernel_request = CREATE;
-       cp->period = period;
-       cp->wcet = wcet;
-       cp->offset = offset;
-       Kernel_Create_Task_At(cp, f);
-       Enter_Kernel();
-    }
-    return (PID)cp->pid;
-}
-
-void Task_Next(void){
-     
-}
-
 
 
 /********************************************************************************
