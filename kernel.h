@@ -1,6 +1,9 @@
 //
 // Created by Willy on 2018-03-14.
 //
+
+#include "os.h"
+
 #ifndef CSC460_KERNEL_H
 #define CSC460_KERNEL_H
 

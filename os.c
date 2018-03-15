@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "lcd/lcd_drv.h"
+#include <util/delay.h>
 
 #define Disable_Interrupt()		asm volatile ("cli"::)
 #define Enable_Interrupt()		asm volatile ("sei"::)
@@ -391,4 +393,43 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
          Dispatch();
      }
      //else not op
+}
+
+void Blink()
+{
+  while(1){
+    PORTB=0x01;
+    lcd_xy(0,0);
+    lcd_puts((void*)"TASK1");
+    lcd_xy(0,1);
+    lcd_puts((void*)"     ");
+	_delay_ms(2000);
+    Task_Next();
+  }
+}
+void Blink2()
+{
+  while(1){
+    PORTB=0x02;
+    lcd_xy(0,0);
+    lcd_puts((void*)"     ");
+    lcd_xy(0,1);
+    lcd_puts((void*)"TASK2");
+    _delay_ms(2000);
+    Task_Next();
+  }
+}
+
+int main() 
+{
+   cli();
+   DDRB=0x83;
+   lcd_init();
+   lcd_xy(0,0);
+   OS_Init();
+   Task_Create_System( Blink ,1);
+   Task_Create_System( Blink2,1 );
+   sei();
+   OS_Start();
+   return -1;
 }

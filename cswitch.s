@@ -69,16 +69,17 @@ EIND = 0x3C
 	push	r31
 	in	r16, SREG
 	push	r16
-    in r16 EIND
+  in r16, EIND
+  push r16
 .endm
 ;
 ; Pop all registers and the status registers
 ;
 .macro	RESTORECTX
+  pop r16
+  out EIND,r16
 	pop	r16
 	out	SREG,r16
-    pop r16
-    out EIND,r16
 	pop	r31
 	pop	r30
 	pop	r29
@@ -150,7 +151,7 @@ Exit_Kernel:
         sts  KernelSp, r30
         sts  KernelSp+1, r31
         /*
-          * We are now ready to restore cp's context, i.e.,
+          * We are now ready to restore Cp's context, i.e.,
           * switching the H/W stack pointer to CurrentSp.
           */ 
         lds  r30, CurrentSp
@@ -158,22 +159,22 @@ Exit_Kernel:
         out  SPL, r30
         out  SPH, r31
         /*
-          * We are now executing in cp's stack.
-          * Note: at the bottom of the cp's context is its return address.
+          * We are now executing in Cp's stack.
+          * Note: at the bottom of the Cp's context is its return address.
           */
         RESTORECTX
         reti         /* re-enable all global interrupts */
 /*
   * All system call eventually enters here!
   * There are two possibilities how we get here: 
-  *  1) cp explicitly invokes one of the kernel API call stub, which indirectly
+  *  1) Cp explicitly invokes one of the kernel API call stub, which indirectly
   *       invoke Enter_Kernel().
   *  2) a timer interrupt, which somehow "jumps" into here.
   * Let us consider case (1) first. You have to figure out how to deal with
   * timer interrupts yourself.
   *
   * Assumption: All interrupts are disabled upon entering here, and
-  *     we are still executing on cp's stack. The return address of
+  *     we are still executing on Cp's stack. The return address of
   *     the caller of Enter_Kernel() is on the top of the stack.
   *
   * void Enter_Kernel();
@@ -181,11 +182,11 @@ Exit_Kernel:
 Enter_Kernel:   
         /*
           * This is the "bottom" half of CSwitch(). We are still executing in
-          * cp's context.
+          * Cp's context.
           */
         SAVECTX
         /* 
-          * Now, we have saved the cp's context.
+          * Now, we have saved the Cp's context.
           * Save the current H/W stack pointer into CurrentSp.
           */
         in   r30, SPL
