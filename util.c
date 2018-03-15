@@ -8,7 +8,7 @@
 *********************************************************************************/
 // The calling task gets its initial "argument" when it was created.
 int  Task_GetArg(void){
-
+     return cp->arg;
 }
 
 // It returns the calling task's PID.

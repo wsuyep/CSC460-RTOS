@@ -49,7 +49,7 @@ static void Dispatch()
            cp = dequeue(&RoundRobinProcess);
            break;
        }else{
-           //TODO IDLE
+
        }
     }
     CurrentSp = cp ->sp;
@@ -125,20 +125,20 @@ static void Next_Kernel_Request()
    Dispatch();  /* select a new task to run */
 
    while(1) {
-       Cp->request = NONE; /* clear its request */
+       cp->request = NONE; /* clear its request */
 
        /* activate this newly selected task */
-       CurrentSp = Cp->sp;
+       CurrentSp = cp->sp;
        Exit_Kernel();    /* or CSwitch() */
 
        /* if this task makes a system call, it will return to here! */
 
         /* save the Cp's stack pointer */
-       Cp->sp = CurrentSp;
+       cp->sp = CurrentSp;
 
-       switch(Cp->request){
+       switch(cp->request){
        case CREATE:
-           Kernel_Create_Task( Cp->code );
+           Kernel_Create_Task( cp->code, cp->priority);
            break;
        case NEXT:
 	   case NONE:
@@ -157,6 +157,7 @@ static void Next_Kernel_Request()
        }
     } 
 }
+
 
 /*================
   * RTOS  API  and Stubs
@@ -241,18 +242,62 @@ void Task_Terminate()
 //TODO
 PID Task_Create_System(void (*f)(void), int arg){
     
+    cp = dequeue(&DeadPool);
+    
+    if(KernelActive){
+       Disable_Interrupt();
+       cp->code = f;
+       //3
+       cp->priority = SYSTEM;
+       cp->arg = arg; 
+       cp->kernel_request = CREATE;
+       Kernel_Create_Task_At(cp, f);
+    }else{
+       //TODO change later
+       Kernel_Create_Task(f);
+    }
+    return (PID)cp->pid;
 }
 
 PID Task_Create_RR(void (*f)(void), int arg){
+    cp = dequeue(&DeadPool);
+    
+    if(KernelActive){
+       Disable_Interrupt();
+       cp->code = f;
+       //3
+       cp->priority = RR;
+       cp->arg = arg; 
+       cp->kernel_request = CREATE;
+       Kernel_Create_Task_At(cp, f);
+    }else{
+       //TODO change later
+       Kernel_Create_Task(f);
+    }
+    return (PID)cp->pid;
     
 }
 
 PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK offset){
-    
+    cp = dequeue(&DeadPool);
+    if(KernelActive){
+       Disable_Interrupt();
+       cp->code = f;
+       //3
+       cp->priority = PERIODIC;
+       cp->arg = arg; 
+       cp->kernel_request = CREATE;
+       cp->period = period;
+       cp->wcet = wcet;
+       cp->offset = offset;
+       Kernel_Create_Task_At(cp, f);
+       Enter_Kernel();
+    }
+    return (PID)cp->pid;
 }
 
 void Task_Next(void){
-    
+     
 }
 
 
