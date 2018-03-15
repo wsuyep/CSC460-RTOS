@@ -56,6 +56,7 @@ static void Dispatch()
      /* find the next READY task
        * Note: if there is no READY task, then this will loop forever!.
        */
+   //TODO: how to place blocked items
     while(1){
        if(SystemProcess.head!=NULL){
            cp = dequeue(&SystemProcess);
@@ -179,7 +180,8 @@ static void Next_Kernel_Request()
          case NEXT:
          case NONE:
             /* NONE could be caused by a timer interrupt */
-            cp->state = READY; //TODO: put it back to ready queue
+            if(cp->state != RUNNING) cp->state = READY;
+            PutBackToReadyQueue(cp);//TODO: put it back to ready queue
             Dispatch();
             break;
          case TERMINATE:
@@ -281,14 +283,14 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          cp->state = REPLYBLOCKED;
          receiver->state=READY;
          enqueue(&(receiver->reply_queue), cp);
-         // TODO: add receiver back to ready queue
-         dispatch();
+         PutBackToReadyQueue(receiver);
+         Task_Next();
      }else{ /*receiver thread is not ready */
         //the client thread becomes sendblock
          cp->state = SENDBLOCKED;
          //add receiver to the sender queue
          enqueue(&(receiver->senders_queue), cp);
-         Dispatch();
+         Task_Next();
      }
      
 }
