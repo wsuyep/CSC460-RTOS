@@ -165,6 +165,12 @@ void OS_Init()
    Tasks = 0;
    KernelActive = 0;
    NextP = 0;
+
+   InitQueue(&SystemProcess);
+   InitQueue(&PeriodicProcess);
+   InitQueue(&RoundRobinProcess);
+   InitQueue(&DeadPool);
+
    for (x = 0; x < MAXTHREAD; x++) {
       memset(&(Process[x]),0,sizeof(PD));
       Process[x].state = DEAD;
@@ -172,7 +178,7 @@ void OS_Init()
       Process[x].next = &(Process[x+1]);
       enqueue(&DeadPool,&(Process[x]));
    }
-   
+
 
 }
 

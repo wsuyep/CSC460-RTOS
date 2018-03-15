@@ -86,3 +86,8 @@ static Boolean InQueue(struct ProcessQueue *queue, struct ProcessDescriptor *p){
     }
     return false;
 }
+
+static void InitQueue(struct ProcessQueue *queue){
+    queue->head = NULL;
+    queue->tail = NULL;
+}
