@@ -6,24 +6,6 @@
 /********************************************************************************
 *			U T I L S
 *********************************************************************************/
-// The calling task gets its initial "argument" when it was created.
-int  Task_GetArg(void){
-     return cp->arg;
-}
-
-// It returns the calling task's PID.
-PID  Task_Pid(void){
-    return cp->pid;
-}
-
-PD *getProcess(PID id){
-    for(int i=0;i<MAXTHREAD;i++){
-        if(Process[i].pid == id){
-            return &(Process[i]);
-        }
-    }
-    return NULL;
-}
 
 void enqueue(struct Queue *queue, struct ProcessDescriptor *p){
     if(queue->head==NULL){
@@ -37,7 +19,7 @@ void enqueue(struct Queue *queue, struct ProcessDescriptor *p){
 }
 
 /* delete the head from a queue */
-static struct ProcessDescriptor *dequeue(struct ProcessQueue *queue)
+static PD *dequeue(struct Queue *queue)
 {
     struct ProcessDescriptor *p;
 
@@ -55,7 +37,7 @@ static struct ProcessDescriptor *dequeue(struct ProcessQueue *queue)
     return p;
 }
 
-static void RemoveQ(struct ProcessQueue *queue, struct ProcessDescriptor *p)
+static void RemoveQ(struct Queue *queue, struct ProcessDescriptor *p)
 {
     struct ProcessDescriptor *curr, *prev;
 
@@ -78,16 +60,16 @@ static void RemoveQ(struct ProcessQueue *queue, struct ProcessDescriptor *p)
     if (queue->head == NULL) queue->tail = NULL;
 }
 
-static Boolean InQueue(struct ProcessQueue *queue, struct ProcessDescriptor *p){
+static BOOL InQueue(struct Queue *queue, struct ProcessDescriptor *p){
     struct ProcessDescriptor *curr = queue->head;
     while(curr != NULL){
-        if(curr == p) return true;
+        if(curr == p) return 1;
         curr = curr->next;
     }
-    return false;
+    return 0;
 }
 
-static void InitQueue(struct ProcessQueue *queue){
+static void InitQueue(struct Queue *queue){
     queue->head = NULL;
     queue->tail = NULL;
 }

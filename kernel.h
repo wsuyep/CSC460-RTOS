@@ -7,6 +7,28 @@
 /********************************************************************************
 *			DATA STRUCTURES
 *********************************************************************************/
+typedef void (*voidfuncptr) (void);      /* pointer to void f(void) */ 
+
+typedef enum kernel_request_type
+{
+    NONE = 0,
+    CREATE,
+    NEXT,
+    TERMINATE,
+    SEND,
+    RECEIVE,
+    REPLY
+} KERNEL_REQUEST_TYPE;
+
+typedef enum {
+    DEAD,
+    READY,
+    RUNNING,
+    SENDBLOCKED,
+    RECEIVEBLOCKED,
+    REPLYBLOCKED
+}PROCESS_STATES;
+
 struct Queue
 {
     struct ProcessDescriptor *head;
@@ -41,29 +63,10 @@ typedef struct ProcessDescriptor
     struct IPCRequest rps; //IPC request
     struct ProcessDescriptor *next;
     PRIORITY_LEVEL priority; //The priority of the task
+    int arg;
     TICK wcet;
     TICK period;
     TICK offset;
 } PD;
-
-typedef enum kernel_request_type
-{
-    NONE = 0,
-    CREATE,
-    NEXT,
-    TERMINATE,
-    SEND,
-    RECEIVE,
-    REPLY
-} KERNEL_REQUEST_TYPE;
-
-typedef enum {
-    DEAD,
-    READY,
-    RUNNING,
-    SENDBLOCKED,
-    RECEIVEBLOCKED,
-    REPLYBLOCKED
-}PROCESS_STATES;
 
 #endif //CSC460_KERNEL_H

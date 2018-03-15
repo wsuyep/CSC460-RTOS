@@ -4,6 +4,9 @@
 #include "os.h"
 #include "kernel.h"
 #include "util.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define Disable_Interrupt()		asm volatile ("cli"::)
 #define Enable_Interrupt()		asm volatile ("sei"::)
@@ -13,10 +16,10 @@
 *********************************************************************************/
 static PD Process[MAXTHREAD];
 
-static Queue SystemProcess;
-static Queue PeriodicProcess;
-static Queue RoundRobinProcess;
-static Queue DeadPool;
+static struct Queue SystemProcess;
+static struct Queue PeriodicProcess;
+static struct Queue RoundRobinProcess;
+static struct Queue DeadPool;
 
 volatile static unsigned int NumSysTasks;
 volatile static unsigned int NumPeriodTasks;
@@ -32,6 +35,31 @@ volatile static unsigned int NextP;
 
 volatile static unsigned int KernelActive;
 
+extern void Enter_Kernel();
+extern void Exit_Kernel();    /* this is the same as CSwitch() */
+
+/* Prototype */
+void Task_Terminate(void);
+static void Next_Kernel_Request();
+
+// The calling task gets its initial "argument" when it was created.
+int Task_GetArg(){
+    return cp->arg;
+}
+
+// It returns the calling task's PID.
+PID Task_Pid(){
+    return cp->pid;
+}
+
+PD *getProcess(PID id){
+    for(int i=0;i<MAXTHREAD;i++){
+        if(Process[i].pid == id){
+            return &(Process[i]);
+        }
+    }
+    return NULL;
+}
 /********************************************************************************
 *			OS (Kernel methods)
 *********************************************************************************/
@@ -48,6 +76,7 @@ static void PutBackToReadyQueue(PD* p){
          break;
       default:
          //TODO: abort
+         break;
    }
 }
 
@@ -165,7 +194,7 @@ static void Next_Kernel_Request()
    Dispatch();  /* select a new task to run */
 
    while(1) {
-      cp->request = NONE; /* clear its request */
+      cp->kernel_request = NONE; /* clear its request */
 
       /* activate this newly selected task */
       CurrentSp = cp->sp;
@@ -174,14 +203,14 @@ static void Next_Kernel_Request()
       /* if this task makes a system call, it will return to here! */
 
       /* save the cp's stack pointer */
-      cp->sp = CurrentSp;
+      cp->sp = (unsigned char *)CurrentSp;
 
-      switch(cp->request){
+      switch(cp->kernel_request){
          case NEXT:
          case NONE:
             /* NONE could be caused by a timer interrupt */
             if(cp->state != RUNNING) cp->state = READY;
-            PutBackToReadyQueue(cp);//TODO: put it back to ready queue
+            PutBackToReadyQueue((PD *)cp);//TODO: put it back to ready queue
             Dispatch();
             break;
          case TERMINATE:
@@ -198,31 +227,31 @@ static void Next_Kernel_Request()
 }
 
 PID Task_Create_System(void (*f)(void), int arg){
-   if (Tasks == MAXPROCESS || DeadPool.head == NULL) return 0;
+   if (Tasks == MAXTHREAD || DeadPool.head == NULL) return 0;
    Disable_Interrupt();
-   new_p = dequeue(&DeadPool);
+   PD *new_p = dequeue(&DeadPool);
    new_p->priority = SYSTEM;
    new_p->arg = arg;
    Kernel_Create_Task_At( new_p, f );
    Enable_Interrupt();
-   return new_p.pid;
+   return new_p->pid;
 }
 
 PID Task_Create_RR(void (*f)(void), int arg){
-   if (Tasks == MAXPROCESS || DeadPool.head == NULL) return 0;
+   if (Tasks == MAXTHREAD || DeadPool.head == NULL) return 0;
    Disable_Interrupt();
-   new_p = dequeue(&DeadPool);
+   PD *new_p = dequeue(&DeadPool);
    new_p->priority = RR;
    new_p->arg = arg;
    Kernel_Create_Task_At( new_p, f );
    Enable_Interrupt();
-   return new_p.pid;
+   return new_p->pid;
 }
 
 PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK offset){
-   if (Tasks == MAXPROCESS || DeadPool.head == NULL) return 0;
+   if (Tasks == MAXTHREAD || DeadPool.head == NULL) return 0;
    Disable_Interrupt();
-   new_p = dequeue(&DeadPool);
+   PD *new_p = dequeue(&DeadPool);
    new_p->priority = PERIODIC;
    new_p->arg = arg;
    new_p->wcet = wcet;
@@ -230,7 +259,7 @@ PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK of
    new_p->offset = offset;
    Kernel_Create_Task_At( new_p, f );
    Enable_Interrupt();
-   return new_p.pid;
+   return new_p->pid;
 }
 
 /**
@@ -240,7 +269,7 @@ void Task_Next()
 {
    if (KernelActive) {
       Disable_Interrupt();
-      cp ->request = NEXT;
+      cp ->kernel_request = NEXT;
       Enter_Kernel();
    }
 }
@@ -252,7 +281,7 @@ void Task_Terminate()
 {
    if (KernelActive) {
       Disable_Interrupt();
-      cp -> request = TERMINATE;
+      cp -> kernel_request = TERMINATE;
       Enter_Kernel();
       /* never returns here! */
    }
@@ -266,7 +295,7 @@ void Task_Terminate()
 /****IPC*****/
 //client thread
 void Msg_Send(PID id, MTYPE t, unsigned int *v){
-     struct PD *receiver;
+     PD *receiver;
      //assign PD by id to receiver
      receiver = getProcess(id);
      if(receiver==NULL){
@@ -276,56 +305,56 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
      if(receiver->state==RECEIVEBLOCKED){
          receiver->rps.pid = Task_Pid();
          //message sent, receiver picks up message v
-         receiver->rps.v = v;
+         receiver->rps.v = *v;
          //message type
          receiver->rps.t = t;
          //client thread becomes reply blocks
          cp->state = REPLYBLOCKED;
          receiver->state=READY;
-         enqueue(&(receiver->reply_queue), cp);
+         enqueue(receiver->reply_queue, (PD *)cp);
          PutBackToReadyQueue(receiver);
          Task_Next();
      }else{ /*receiver thread is not ready */
         //the client thread becomes sendblock
          cp->state = SENDBLOCKED;
          //add receiver to the sender queue
-         enqueue(&(receiver->senders_queue), cp);
+         enqueue(receiver->senders_queue, (PD *)cp);
          Task_Next();
      }
      
 }
 
-void filter_unwantted_requests_for_msg_recv(struct ProcessQueue *queue, MASK m){
+void filter_unwantted_requests_for_msg_recv(struct Queue *queue, MASK m){
 	struct ProcessDescriptor *curr = queue->head;
 	while(curr !=NULL){
 		struct ProcessDescriptor *tmp = curr;
 		curr = curr->next;
 		// remove requests that we don't want
-		if(((unsigned int)tmp->rps.send.t & (unsigned int)m) == 0b00000000){
+		if(((unsigned int)tmp->rps.t & (unsigned int)m) == 0b00000000){
 			RemoveQ(queue,tmp);
 		}
 	}
 }
 
 PID  Msg_Recv(MASK m, unsigned int *v ){
-      struct PD *first_sender;
-      filter_unwantted_requests_for_msg_recv(&(cp->senders_queue),m);
-      first_sender = dequeue(&(cp->senders_queue));
+      PD *first_sender;
+      filter_unwantted_requests_for_msg_recv(cp->senders_queue,m);
+      first_sender = dequeue(cp->senders_queue);
 
       //no client thread has done sent
       if(first_sender == NULL){
          cp->state = RECEIVEBLOCKED;
          Dispatch();
-         return &(cp->rps.pid);
+         return cp->rps.pid;
       }else{
          first_sender->state=REPLYBLOCKED;
          //add to reply queue 
-         enqueue(&(cp->reply_queue), first_sender);
+         enqueue(cp->reply_queue, first_sender);
          //check sender message type and MASK
          cp->rps.pid = first_sender->pid;
          cp->rps.v = first_sender->rps.v;
          cp->rps.t = first_sender->rps.t;
-         return  &(first_sender->pid);
+         return  first_sender->pid;
       }
      
 }
@@ -351,7 +380,7 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
          return;
      }
      //if p is waiting on receive
-     if(receiver-->state==RECEIVEBLOCKED){
+     if(receiver->state==RECEIVEBLOCKED){
          receiver->rps.pid = id;
          //message sent, receiver picks up message v
          receiver->rps.v = v;

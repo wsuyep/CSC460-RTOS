@@ -1,22 +1,19 @@
 //
 // Created by Willy on 2018-03-14.
 //
+#include "kernel.h"
+#include "util.c"
 
 #ifndef CSC460_UTIL_H
 #define CSC460_UTIL_H
 
-int  Task_GetArg(void);
-
-PID  Task_Pid(void);
-
-PD *getProcess(PID id);
-
 void enqueue(struct Queue *queue, struct ProcessDescriptor *p);
 
-static struct ProcessDescriptor *dequeue(struct ProcessQueue *queue);
+static PD *dequeue(struct Queue *queue);
 
-static void RemoveQ(struct ProcessQueue *queue, struct ProcessDescriptor *p);
+static void RemoveQ(struct Queue *queue, struct ProcessDescriptor *p);
 
-static Boolean InQueue(struct ProcessQueue *queue, struct ProcessDescriptor *p);
+static BOOL InQueue(struct Queue *queue, struct ProcessDescriptor *p);
 
+static void InitQueue(struct Queue *queue);
 #endif //CSC460_UTIL_H
