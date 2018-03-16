@@ -115,29 +115,29 @@ static void PutBackToReadyQueue(PD* p){
      OS_Abort(5);
    }
    p->state = READY;
-   counter++;
+   //counter++;
    printf("%d.Putting back to readyQ: %d : %d\n",counter,p->pid,p->priority);
    switch(p->priority){
       case SYSTEM:
-         counter++;
-         printf("%d.before adding,items in System queue: %d\n",counter,ItemsInQ(&SystemProcess));
+         //counter++;
+         //printf("%d.before adding,items in System queue: %d\n",counter,ItemsInQ(&SystemProcess));
          enqueue(&SystemProcess,p);
          counter++;
-         printf("%d.after adding,items in System queue: %d\n",counter,ItemsInQ(&SystemProcess));
+         printf("%d.after adding item to System queue: %d\n",counter,ItemsInQ(&SystemProcess));
          break;
       case PERIODIC:
          counter++;
          printf("%d.before adding,items in Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
-         enqueue(&PeriodicProcess,p);
+         //enqueue(&PeriodicProcess,p);
          counter++;
-         printf("%d.after adding,items in Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
+         printf("%d.after adding items to Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
          break;
       case RR:
-         counter++;
-         printf("%d.before adding,items in RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
+         //counter++;
+         //printf("%d.before adding,items in RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
          enqueue(&RoundRobinProcess,p);
          counter++;
-         printf("%d.after adding,items in RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
+         printf("%d.after adding item to RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
          break;
       default:
          OS_Abort(2);
@@ -174,7 +174,6 @@ static PD *GetFirstNonBlockPeriodicProcess(){
     if(readyCount > 1){
       OS_Abort(1);
     }else if (readyCount == 1){
-      RemoveQ(&PeriodicProcess,readyTask);
       return readyTask;
     }
     return NULL;
@@ -190,19 +189,19 @@ static void Dispatch()
       cp = GetFirstNonBlockProcess(&SystemProcess);
       if(cp){
         counter++;
-        printf("%d.Found system task: %d\n",counter,cp->pid);
+        printf("%d.Selected new system task: %d\n",counter,cp->pid);
         break;
       }
       cp = GetFirstNonBlockPeriodicProcess();
       if(cp) {
         counter++;
-        printf("%d.Found periodic task: %d\n",counter, cp->pid);
+        printf("%d.Selected new periodic task: %d\n",counter, cp->pid);
         break;
       }
       cp = GetFirstNonBlockProcess(&RoundRobinProcess);
       if(cp) {
         counter++;
-        printf("%d.Found RR task: %d\n",counter,cp->pid);
+        printf("%d.Selected new RR task: %d\n",counter,cp->pid);
         break;
       }
     }
@@ -280,7 +279,7 @@ void OS_Start()
 {   
    if ( (! KernelActive) && (Tasks > 0)) {
        Disable_Interrupt();
-       printf("STARTING OS\n");
+       printf("-------STARTING OS--------\n\n\n");
       /* we may have to initialize the interrupt vector for Enter_Kernel() here. */
 
       /* here we go...  */
@@ -308,8 +307,8 @@ static void Next_Kernel_Request()
       /* activate this newly selected task */
       CurrentSp = cp->sp;
       Exit_Kernel();    /* or CSwitch() */
-      counter++;
-      printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
+      //counter++;
+      //printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
 
       /* if this task makes a system call, it will return to here! */
 
@@ -388,6 +387,7 @@ PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK of
    new_p->period = period;
    new_p->offset = offset;
    Kernel_Create_Task_At( new_p, f );
+   enqueue(&PeriodicProcess,new_p);
    if(KernelActive) Enable_Interrupt();
    return new_p->pid;
 }
@@ -429,7 +429,7 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
      //assign PD by id to receiver
      receiver = getProcess(id);
      if(receiver==NULL){
-         return;
+         OS_Abort(7);
      }
 
      if(receiver->state==RECEIVEBLOCKED){
@@ -500,7 +500,10 @@ void Msg_Rply(PID id, unsigned int r ){
     PD *sender;
     //set current cp to sender
     sender = getProcess(id);
-    if(sender != NULL && InQueue(cp->reply_queue,sender)){
+    if(sender == NULL){
+      OS_Abort(8);
+    }
+    if(InQueue(cp->reply_queue,sender)){
         //current reply to sender
         RemoveQ(cp->reply_queue, sender);
         sender->rps.r=r;
@@ -514,7 +517,7 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
      PD *receiver;
      receiver = getProcess(id);
      if(receiver==NULL){
-         return;
+         OS_Abort(9);
      }
      //if p is waiting on receive
      if(receiver->state==RECEIVEBLOCKED){
@@ -525,7 +528,7 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
          receiver->rps.t = t;
          //dont have to wait for reply
      }else{
-         Dispatch();
+         Task_Next();
      }
      //else not op
 }
@@ -537,7 +540,7 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
 ISR(TIMER4_COMPA_vect){
   ticks++;
   //counter++;
-  printf("INSIDE INTERRUPT SP:%p%p\n",cp->sp,cp->sp +1);
+  //printf("INSIDE INTERRUPT SP:%p%p\n",cp->sp,cp->sp +1);
   //printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
   //printf("number of: %d\n",ItemsInQ(&PeriodicProcess));
   if (KernelActive) {
@@ -547,6 +550,10 @@ ISR(TIMER4_COMPA_vect){
    }
 }
 
+void sys(){
+  cli();
+  sei();
+}
 void Blink()
 {
   unsigned int a = 1;
@@ -576,9 +583,12 @@ int main()
    uart_init();
    stdout = &uart_output;
    stdin = &uart_input;
+   //test case 1
+   Task_Create_System( sys ,1);
    Task_Create_RR( Blink ,1);
    Task_Create_RR( Blink2 ,1);
    Task_Create_Period( Blink ,1,4,1,0);
+   Task_Create_Period( Blink ,1,4,1,1);
    setupTimer();
    sei();
    OS_Start();
