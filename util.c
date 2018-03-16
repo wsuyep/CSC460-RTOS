@@ -73,3 +73,17 @@ static void InitQueue(struct Queue *queue){
     queue->head = NULL;
     queue->tail = NULL;
 }
+
+static PD *GetFirstNonBlockProcess(struct Queue *queue){
+    PD *curr = queue->head;
+    while(curr != NULL){
+        if(curr->state == READY){
+           RemoveQ(queue,curr);
+           return curr; 
+        } 
+    }
+    return NULL;
+}
+
+
+

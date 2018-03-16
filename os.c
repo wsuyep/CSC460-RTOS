@@ -9,6 +9,7 @@
 #include <string.h>
 #include "lcd/lcd_drv.h"
 #include <util/delay.h>
+#include "avr_console.h"
 
 #define Disable_Interrupt()		asm volatile ("cli"::)
 #define Enable_Interrupt()		asm volatile ("sei"::)
@@ -37,6 +38,8 @@ volatile static unsigned int NextP;
 
 volatile static unsigned int KernelActive;
 
+TICK ticks = 0;
+
 extern void Enter_Kernel();
 extern void Exit_Kernel();    /* this is the same as CSwitch() */
 
@@ -61,6 +64,13 @@ PD *getProcess(PID id){
         }
     }
     return NULL;
+}
+
+void OS_Abort(unsigned int error){
+  cli();
+  while(1){
+    printf("Error with error code: %d\n", error);
+  }
 }
 /********************************************************************************
 *			OS (Kernel methods)
@@ -103,30 +113,54 @@ static void PutBackToReadyQueue(PD* p){
          enqueue(&RoundRobinProcess,p);
          break;
       default:
-         //TODO: abort
+         OS_Abort(2);
          break;
    }
 }
 
+static PD *GetFirstNonBlockProcess(struct Queue *queue){
+    PD *curr = queue->head;
+    while(curr != NULL){
+        if(curr->state == READY){
+           RemoveQ(queue,curr);
+           return curr; 
+        }
+        curr = curr->next;
+    }
+    return NULL;
+}
+
+static PD *GetFirstNonBlockPeriodicProcess(){
+    unsigned int readyCount = 0;
+    PD * curr = PeriodicProcess.head;
+    PD * readyTask;
+    while(curr != NULL){
+      if((ticks-curr.offset)%curr.period == 0){
+        readyTask = curr;
+        readyCount ++;
+      }
+      curr->next;
+    }
+    
+    if(readyCount > 1){
+      OS_Abort(1);
+    }else if (readyCount == 1){
+      return readyTask
+    }
+    return NULL;
+}
 static void Dispatch()
 {
      /* find the next READY task
        * Note: if there is no READY task, then this will loop forever!.
        */
-   //TODO: how to place blocked items
     while(1){
-       if(SystemProcess.head!=NULL){
-           cp = dequeue(&SystemProcess);
-           break;
-       }else if(PeriodicProcess.head!=NULL){
-           //TODO
-           break;
-       }else if(RoundRobinProcess.head!=NULL){
-           cp = dequeue(&RoundRobinProcess);
-           break;
-       }else{
-
-       }
+      cp = GetFirstNonBlockProcess(&SystemProcess);
+      if(cp) break;
+      cp = GetFirstNonBlockPeriodicProcess();
+      if(cp) break;
+      cp = GetFirstNonBlockProcess(&RoundRobinProcess);
+      if(cp) break;
     }
     CurrentSp = cp ->sp;
     cp->state = RUNNING;
@@ -167,7 +201,7 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
    p->rps.status=0;
    Tasks++;
    p->next =NULL;
-   p->state = READY;   //TODO: put it into ready queue
+   p->state = READY;
    PutBackToReadyQueue(p);
 }
 
@@ -248,7 +282,7 @@ static void Next_Kernel_Request()
             break;
          default:
             /* Houston! we have a problem here! */
-            //TODO: abort
+            OS_Abort(3);
             break;
       }
    }
@@ -426,18 +460,42 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
 *********************************************************************************/
 
 ISR(TIMER4_COMPA_vect){
+  // note: only one in the periodic queue should run at a time
+  // foreach task in periodic queue
+  // if ticks-offset % period == 0
+  // dispatch it and run
+  //if ticks
+  ticks++;
+  unsigned int readyCount = 0;
+  PD * curr = PeriodicProcess.head;
+  PD * readyTask;
+  while(curr != NULL){
+    if((ticks-curr.offset)%curr.period == 0){
+      readyTask = curr;
+      readyCount ++;
+    }
+    curr->next;
+  }
 
-  if (KernelActive) {
-     cp ->kernel_request = NEXT;
-     Enter_Kernel();
-   }
+  if(readyCount > 1){
+    OS_Abort(1);
+  }else if (readyCount == 1){
+    if (KernelActive) {
+       cp ->kernel_request = NEXT;
+       Enter_Kernel();
+     }
+  }
+
 }
 
 void Blink()
 {
   while(1){
     PORTB=0x01;
-	//_delay_ms(2000);
+    cli();
+    printf("task_1\n");
+    sei();
+	  _delay_ms(200);
     //Task_Next();
   }
 }
@@ -445,7 +503,10 @@ void Blink2()
 {
   while(1){
     PORTB=0x02;
-    //_delay_ms(2000);
+    cli();
+    printf("task_2\n");
+    sei();
+    _delay_ms(200);
     //Task_Next();
   }
 }
@@ -458,6 +519,9 @@ int main()
    lcd_xy(0,0);
    setupTimer();
    OS_Init();
+   uart_init();
+   stdout = &uart_output;
+   stdin = &uart_input;
    Task_Create_System( Blink ,1);
    Task_Create_System( Blink2,1 );
    sei();
