@@ -24,9 +24,6 @@ static struct Queue PeriodicProcess;
 static struct Queue RoundRobinProcess;
 static struct Queue DeadPool;
 
-volatile static unsigned int NumSysTasks;
-volatile static unsigned int NumPeriodTasks;
-volatile static unsigned int NumRRTasks;
 volatile static unsigned int Tasks;
 
 volatile static PD* cp;
@@ -115,20 +112,28 @@ static unsigned int ItemsInQ(struct Queue * queue){
 static void PutBackToReadyQueue(PD* p){
    p->state = READY;
    counter++;
-   printf("%d.Putting back to readyQ: %d : %d\n",counter,cp->pid,cp->priority);
+   printf("%d.Putting back to readyQ: %d : %d\n",counter,p->pid,p->priority);
    switch(p->priority){
       case SYSTEM:
          counter++;
-         printf("%d.before adding,items in queue: %d\n",counter,ItemsInQ(&SystemProcess));
+         printf("%d.before adding,items in System queue: %d\n",counter,ItemsInQ(&SystemProcess));
          enqueue(&SystemProcess,p);
          counter++;
-         printf("%d.after adding,items in queue: %d\n",counter,ItemsInQ(&SystemProcess));
+         printf("%d.after adding,items in System queue: %d\n",counter,ItemsInQ(&SystemProcess));
          break;
       case PERIODIC:
+         counter++;
+         printf("%d.before adding,items in Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
          enqueue(&PeriodicProcess,p);
+         counter++;
+         printf("%d.after adding,items in Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
          break;
       case RR:
+         counter++;
+         printf("%d.before adding,items in RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
          enqueue(&RoundRobinProcess,p);
+         counter++;
+         printf("%d.after adding,items in RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
          break;
       default:
          OS_Abort(2);
@@ -153,6 +158,8 @@ static PD *GetFirstNonBlockPeriodicProcess(){
     PD * curr = PeriodicProcess.head;
     PD * readyTask = NULL;
     while(curr != NULL){
+      counter++;
+      printf("%d.tick: %d offset: %d period: %d   answer: %d\n",counter,ticks,curr->offset,curr->period,(ticks - curr->offset)%curr->period);
       if((ticks - curr->offset)%curr->period == 0){
         readyTask = curr;
         readyCount ++;
@@ -163,6 +170,7 @@ static PD *GetFirstNonBlockPeriodicProcess(){
     if(readyCount > 1){
       OS_Abort(1);
     }else if (readyCount == 1){
+      RemoveQ(&PeriodicProcess,readyTask);
       return readyTask;
     }
     return NULL;
@@ -173,8 +181,8 @@ static void Dispatch()
        * Note: if there is no READY task, then this will loop forever!.
        */
     while(1){
-      counter++;
-      printf("%d.Looking for new task\n",counter);
+      //counter++;
+      //printf("%d.Looking for new task ",counter);
       cp = GetFirstNonBlockProcess(&SystemProcess);
       if(cp){
         counter++;
@@ -266,6 +274,7 @@ void OS_Start()
 {   
    if ( (! KernelActive) && (Tasks > 0)) {
        Disable_Interrupt();
+       printf("STARTING OS\n");
       /* we may have to initialize the interrupt vector for Enter_Kernel() here. */
 
       /* here we go...  */
@@ -293,6 +302,8 @@ static void Next_Kernel_Request()
       /* activate this newly selected task */
       CurrentSp = cp->sp;
       Exit_Kernel();    /* or CSwitch() */
+      counter++;
+      printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
 
       /* if this task makes a system call, it will return to here! */
 
@@ -303,8 +314,9 @@ static void Next_Kernel_Request()
          case NEXT:
          case NONE:
             /* NONE could be caused by a timer interrupt */
+            /*
             counter++;
-            printf("%d.entered kernel, and cp state is:",counter);
+            printf("%d.entered kernel, and cp id: %d  state is:",counter,cp->pid);
             switch(cp->state){
               case RUNNING:
                 printf("RUNNING\n");
@@ -318,7 +330,7 @@ static void Next_Kernel_Request()
               default:
                 printf("BLOCKED\n");
                 break;
-            }
+            }*/
             if(cp->state != RUNNING) OS_Abort(4);
             PutBackToReadyQueue((PD *)cp);//TODO: put it back to ready queue
             Dispatch();
@@ -338,29 +350,29 @@ static void Next_Kernel_Request()
 
 PID Task_Create_System(void (*f)(void), int arg){
    if (Tasks == MAXTHREAD || DeadPool.head == NULL) return 0;
-   Disable_Interrupt();
+   if(KernelActive) Disable_Interrupt();
    PD *new_p = dequeue(&DeadPool);
    new_p->priority = SYSTEM;
    new_p->arg = arg;
    Kernel_Create_Task_At( new_p, f );
-   Enable_Interrupt();
+   if(KernelActive) Enable_Interrupt();
    return new_p->pid;
 }
 
 PID Task_Create_RR(void (*f)(void), int arg){
    if (Tasks == MAXTHREAD || DeadPool.head == NULL) return 0;
-   Disable_Interrupt();
+   if(KernelActive) Disable_Interrupt();
    PD *new_p = dequeue(&DeadPool);
    new_p->priority = RR;
    new_p->arg = arg;
    Kernel_Create_Task_At( new_p, f );
-   Enable_Interrupt();
+   if(KernelActive) Enable_Interrupt();
    return new_p->pid;
 }
 
 PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK offset){
    if (Tasks == MAXTHREAD || DeadPool.head == NULL) return 0;
-   Disable_Interrupt();
+   if(KernelActive) Disable_Interrupt();
    PD *new_p = dequeue(&DeadPool);
    new_p->priority = PERIODIC;
    new_p->arg = arg;
@@ -368,7 +380,7 @@ PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK of
    new_p->period = period;
    new_p->offset = offset;
    Kernel_Create_Task_At( new_p, f );
-   Enable_Interrupt();
+   if(KernelActive) Enable_Interrupt();
    return new_p->pid;
 }
 
@@ -509,10 +521,11 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
 
 ISR(TIMER4_COMPA_vect){
   ticks++;
+  //counter++;
+  //printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
+  //printf("number of: %d\n",ItemsInQ(&PeriodicProcess));
   if (KernelActive) {
      cp ->kernel_request = NEXT;
-     counter++;
-     printf("%d.Entering timer interrupt\n",counter);
      Enter_Kernel();
    }
 }
@@ -522,7 +535,7 @@ void Blink()
   while(1){
     PORTB=0x01;
 	  _delay_ms(200);
-    Task_Next();
+    //Task_Next();
   }
 }
 void Blink2()
@@ -530,7 +543,7 @@ void Blink2()
   while(1){
     PORTB=0x02;
     _delay_ms(200);
-    Task_Next();
+    //Task_Next();
   }
 }
 
@@ -540,13 +553,14 @@ int main()
    DDRB=0x83;
    lcd_init();
    lcd_xy(0,0);
-   //setupTimer();
+   setupTimer();
    OS_Init();
    uart_init();
    stdout = &uart_output;
    stdin = &uart_input;
-   Task_Create_System( Blink ,1);
-   Task_Create_System( Blink2,1 );
+   Task_Create_RR( Blink ,1);
+   Task_Create_Period( Blink ,1,4,1,0);
+   Task_Create_Period( Blink2,1,4,1,1);
    sei();
    OS_Start();
    return -1;
