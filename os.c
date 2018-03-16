@@ -133,19 +133,19 @@ static PD *GetFirstNonBlockProcess(struct Queue *queue){
 static PD *GetFirstNonBlockPeriodicProcess(){
     unsigned int readyCount = 0;
     PD * curr = PeriodicProcess.head;
-    PD * readyTask;
+    PD * readyTask = NULL;
     while(curr != NULL){
-      if((ticks-curr.offset)%curr.period == 0){
+      if((ticks - curr->offset)%curr->period == 0){
         readyTask = curr;
         readyCount ++;
       }
-      curr->next;
+      curr = curr->next;
     }
     
     if(readyCount > 1){
       OS_Abort(1);
     }else if (readyCount == 1){
-      return readyTask
+      return readyTask;
     }
     return NULL;
 }
@@ -462,7 +462,7 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
 ISR(TIMER4_COMPA_vect){
   ticks++;
   if (KernelActive) {
-     Cp ->request = NEXT;
+     cp ->kernel_request = NEXT;
      Enter_Kernel();
    }
 }

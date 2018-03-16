@@ -17,6 +17,4 @@ static BOOL InQueue(struct Queue *queue, struct ProcessDescriptor *p);
 
 static void InitQueue(struct Queue *queue);
 
-static PD *GetFirstNonBlockProcess(struct Queue *queue);
-
 #endif //CSC460_UTIL_H
