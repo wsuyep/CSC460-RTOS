@@ -460,32 +460,11 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
 *********************************************************************************/
 
 ISR(TIMER4_COMPA_vect){
-  // note: only one in the periodic queue should run at a time
-  // foreach task in periodic queue
-  // if ticks-offset % period == 0
-  // dispatch it and run
-  //if ticks
   ticks++;
-  unsigned int readyCount = 0;
-  PD * curr = PeriodicProcess.head;
-  PD * readyTask;
-  while(curr != NULL){
-    if((ticks-curr.offset)%curr.period == 0){
-      readyTask = curr;
-      readyCount ++;
-    }
-    curr->next;
-  }
-
-  if(readyCount > 1){
-    OS_Abort(1);
-  }else if (readyCount == 1){
-    if (KernelActive) {
-       cp ->kernel_request = NEXT;
-       Enter_Kernel();
-     }
-  }
-
+  if (KernelActive) {
+     Cp ->request = NEXT;
+     Enter_Kernel();
+   }
 }
 
 void Blink()
