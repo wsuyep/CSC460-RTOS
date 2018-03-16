@@ -39,6 +39,7 @@ volatile static unsigned int NextP;
 volatile static unsigned int KernelActive;
 
 TICK ticks = 0;
+unsigned int counter = 0;
 
 extern void Enter_Kernel();
 extern void Exit_Kernel();    /* this is the same as CSwitch() */
@@ -101,10 +102,27 @@ void setupTimer(){
 
 }
 
+static unsigned int ItemsInQ(struct Queue * queue){
+  unsigned int i = 0;
+  PD *curr = queue->head;
+  while(curr != NULL){
+      i++;
+      curr = curr->next;
+  }
+  return i;
+}
+
 static void PutBackToReadyQueue(PD* p){
+   p->state = READY;
+   counter++;
+   printf("%d.Putting back to readyQ: %d : %d\n",counter,cp->pid,cp->priority);
    switch(p->priority){
       case SYSTEM:
+         counter++;
+         printf("%d.before adding,items in queue: %d\n",counter,ItemsInQ(&SystemProcess));
          enqueue(&SystemProcess,p);
+         counter++;
+         printf("%d.after adding,items in queue: %d\n",counter,ItemsInQ(&SystemProcess));
          break;
       case PERIODIC:
          enqueue(&PeriodicProcess,p);
@@ -155,12 +173,26 @@ static void Dispatch()
        * Note: if there is no READY task, then this will loop forever!.
        */
     while(1){
+      counter++;
+      printf("%d.Looking for new task\n",counter);
       cp = GetFirstNonBlockProcess(&SystemProcess);
-      if(cp) break;
+      if(cp){
+        counter++;
+        printf("%d.Found system task: %d\n",counter,cp->pid);
+        break;
+      }
       cp = GetFirstNonBlockPeriodicProcess();
-      if(cp) break;
+      if(cp) {
+        counter++;
+        printf("%d.Found periodic task: %d\n",counter, cp->pid);
+        break;
+      }
       cp = GetFirstNonBlockProcess(&RoundRobinProcess);
-      if(cp) break;
+      if(cp) {
+        counter++;
+        printf("%d.Found RR task: %d\n",counter,cp->pid);
+        break;
+      }
     }
     CurrentSp = cp ->sp;
     cp->state = RUNNING;
@@ -271,7 +303,23 @@ static void Next_Kernel_Request()
          case NEXT:
          case NONE:
             /* NONE could be caused by a timer interrupt */
-            if(cp->state != RUNNING) cp->state = READY;
+            counter++;
+            printf("%d.entered kernel, and cp state is:",counter);
+            switch(cp->state){
+              case RUNNING:
+                printf("RUNNING\n");
+                break;
+              case READY:
+                printf("READY\n");
+                break;
+              case NONE:
+                printf("DEAD\n");
+                break;
+              default:
+                printf("BLOCKED\n");
+                break;
+            }
+            if(cp->state != RUNNING) OS_Abort(4);
             PutBackToReadyQueue((PD *)cp);//TODO: put it back to ready queue
             Dispatch();
             break;
@@ -463,6 +511,8 @@ ISR(TIMER4_COMPA_vect){
   ticks++;
   if (KernelActive) {
      cp ->kernel_request = NEXT;
+     counter++;
+     printf("%d.Entering timer interrupt\n",counter);
      Enter_Kernel();
    }
 }
@@ -471,22 +521,16 @@ void Blink()
 {
   while(1){
     PORTB=0x01;
-    cli();
-    printf("task_1\n");
-    sei();
 	  _delay_ms(200);
-    //Task_Next();
+    Task_Next();
   }
 }
 void Blink2()
 {
   while(1){
     PORTB=0x02;
-    cli();
-    printf("task_2\n");
-    sei();
     _delay_ms(200);
-    //Task_Next();
+    Task_Next();
   }
 }
 
@@ -496,7 +540,7 @@ int main()
    DDRB=0x83;
    lcd_init();
    lcd_xy(0,0);
-   setupTimer();
+   //setupTimer();
    OS_Init();
    uart_init();
    stdout = &uart_output;
