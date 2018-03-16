@@ -9,6 +9,7 @@
 #include <string.h>
 #include "lcd/lcd_drv.h"
 #include <util/delay.h>
+#include "avr_console.h"
 
 #define Disable_Interrupt()		asm volatile ("cli"::)
 #define Enable_Interrupt()		asm volatile ("sei"::)
@@ -209,6 +210,7 @@ void OS_Start()
    }
 }
 
+
 /**
   * This internal kernel function is the "main" driving loop of this full-served
   * model architecture. Basically, on OS_Start(), the kernel repeatedly
@@ -326,6 +328,7 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
      PD *receiver;
      //assign PD by id to receiver
      receiver = getProcess(id);
+     printf("enter send\n");
      if(receiver==NULL){
          return;
      }
@@ -340,10 +343,12 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          cp->state = REPLYBLOCKED;
          receiver->state=READY;
          enqueue(receiver->reply_queue, (PD *)cp);
+         printf("add receiver to ready queue\n");
          PutBackToReadyQueue(receiver);
          Task_Next();
      }else{ /*receiver thread is not ready */
         //the client thread becomes sendblock
+         printf("send block\n");
          cp->state = SENDBLOCKED;
          //add receiver to the sender queue
          enqueue(receiver->senders_queue, (PD *)cp);
@@ -359,6 +364,7 @@ void filter_unwantted_requests_for_msg_recv(struct Queue *queue, MASK m){
 		curr = curr->next;
 		// remove requests that we don't want
 		if(((unsigned int)tmp->rps.t & (unsigned int)m) == 0b00000000){
+            printf("remove unwanted");
 			RemoveQ(queue,tmp);
 		}
 	}
@@ -371,10 +377,12 @@ PID  Msg_Recv(MASK m, unsigned int *v ){
 
       //no client thread has done sent
       if(first_sender == NULL){
+         printf("no sender\n");
          cp->state = RECEIVEBLOCKED;
-         Dispatch();
+         Task_Next();
          return cp->rps.pid;
       }else{
+         printf("find sender\n");
          first_sender->state=REPLYBLOCKED;
          //add to reply queue 
          enqueue(cp->reply_queue, first_sender);
@@ -416,7 +424,7 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
          receiver->rps.t = t;
          //dont have to wait for reply
      }else{
-         Dispatch();
+         Task_Next();
      }
      //else not op
 }
@@ -431,35 +439,103 @@ ISR(TIMER4_COMPA_vect){
      cp ->kernel_request = NEXT;
      Enter_Kernel();
    }
+    
 }
 
 void Blink()
 {
   while(1){
-    PORTB=0x01;
-	//_delay_ms(2000);
+    
+     printf("task1");
+	_delay_ms(2000);
     //Task_Next();
   }
 }
 void Blink2()
 {
   while(1){
-    PORTB=0x02;
+    
+    printf("task2");
+    _delay_ms(2000);
     //_delay_ms(2000);
     //Task_Next();
   }
 }
 
+//TEST IPC
+void Blink_IPC()
+{
+  while(1){
+     send();
+     //printf("task1 IPC\n");
+	_delay_ms(2000);
+    //Task_Next();
+  }
+}
+void Blink2_IPC()
+{
+  while(1){
+    receive();
+    //printf("task2 IPC\n");
+    _delay_ms(2000);
+    //_delay_ms(2000);
+    //Task_Next();
+  }
+}
+
+
+void send(){
+    unsigned int a=0;
+    Msg_Send(cp->pid, 'a', &a);
+    //printf("send 0");
+}
+
+void receive(){
+    unsigned int a=0;
+    PID id = Msg_Recv(0xff,&a);
+    printf(id);
+    //printf("receive 0");
+}
+
+//TEST System Process
+void test1(){
+   Task_Create_System( Blink,1);
+   Task_Create_System( Blink2,1 );
+}
+
+//TEST RR
+void test2(){
+   Task_Create_RR( Blink, 1);
+   //Task_Create_System( Blink2,1 );
+}
+
+//TEST MAXProcess
+void test3(){
+    int i;
+	for (i = 0; i < 20; i++) {
+		Task_Create_RR(Blink, i);
+	}
+}
+
+//test sendIPC
+void testIPC(){
+    
+    Task_Create_System(Blink_IPC, 1);
+    Task_Create_System(Blink2_IPC, 1);
+}
+
 int main() 
 {
+   uart_init();
+   stdout = &uart_output;
+   stdin = &uart_input;
    cli();
    DDRB=0x83;
    lcd_init();
    lcd_xy(0,0);
    setupTimer();
    OS_Init();
-   Task_Create_System( Blink ,1);
-   Task_Create_System( Blink2,1 );
+   testIPC();
    sei();
    OS_Start();
    return -1;
