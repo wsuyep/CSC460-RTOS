@@ -38,6 +38,9 @@ volatile static unsigned int NextP;
 
 volatile static unsigned int KernelActive;
 
+TICK ticks = 0;
+unsigned int counter = 0;
+
 extern void Enter_Kernel();
 extern void Exit_Kernel();    /* this is the same as CSwitch() */
 
@@ -55,13 +58,20 @@ PID Task_Pid(){
     return cp->pid;
 }
 
-PD *getProcess(PID id){
+int getProcess(PID id){
     for(int i=0;i<MAXTHREAD;i++){
         if(Process[i].pid == id){
-            return &(Process[i]);
+            return i;
         }
     }
-    return NULL;
+    return -1;
+}
+
+void OS_Abort(unsigned int error){
+  cli();
+  while(1){
+    printf("Error with error code: %d\n", error);
+  }
 }
 /********************************************************************************
 *			OS (Kernel methods)
@@ -93,9 +103,13 @@ void setupTimer(){
 }
 
 static void PutBackToReadyQueue(PD* p){
+   p->state = READY;
+   counter++;
    switch(p->priority){
       case SYSTEM:
+         counter++;
          enqueue(&SystemProcess,p);
+         counter++;
          break;
       case PERIODIC:
          enqueue(&PeriodicProcess,p);
@@ -104,30 +118,67 @@ static void PutBackToReadyQueue(PD* p){
          enqueue(&RoundRobinProcess,p);
          break;
       default:
-         //TODO: abort
+         //OS_Abort(2);
          break;
    }
 }
 
+static PD *GetFirstNonBlockProcess(struct Queue *queue){
+    PD *curr = queue->head;
+    while(curr != NULL){
+        if(curr->state == READY){
+           RemoveQ(queue,curr);
+           return curr; 
+        }
+        curr = curr->next;
+    }
+    return NULL;
+}
+
+static PD *GetFirstNonBlockPeriodicProcess(){
+    unsigned int readyCount = 0;
+    PD * curr = PeriodicProcess.head;
+    PD * readyTask = NULL;
+    while(curr != NULL){
+      if((ticks - curr->offset)%curr->period == 0){
+        readyTask = curr;
+        readyCount ++;
+      }
+      curr = curr->next;
+    }
+    
+    if(readyCount > 1){
+      OS_Abort(1);
+    }else if (readyCount == 1){
+      return readyTask;
+    }
+    return NULL;
+}
 static void Dispatch()
 {
      /* find the next READY task
        * Note: if there is no READY task, then this will loop forever!.
        */
-   //TODO: how to place blocked items
     while(1){
-       if(SystemProcess.head!=NULL){
-           cp = dequeue(&SystemProcess);
-           break;
-       }else if(PeriodicProcess.head!=NULL){
-           //TODO
-           break;
-       }else if(RoundRobinProcess.head!=NULL){
-           cp = dequeue(&RoundRobinProcess);
-           break;
-       }else{
-
-       }
+      counter++;
+      cp = GetFirstNonBlockProcess(&SystemProcess);
+      if(cp){
+        counter++;
+        printf("%d.Found system task: %d\n",counter,cp->pid);
+        break;
+      }
+      cp = GetFirstNonBlockPeriodicProcess();
+      if(cp) {
+        counter++;
+        printf("%d.Found periodic task: %d\n",counter, cp->pid);
+        break;
+      }
+      cp = GetFirstNonBlockProcess(&RoundRobinProcess);
+      if(cp) {
+        counter++;
+        printf("%d.Found RR task: %d\n",counter,cp->pid);
+        break;
+      }
     }
     CurrentSp = cp ->sp;
     cp->state = RUNNING;
@@ -168,7 +219,7 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
    p->rps.status=0;
    Tasks++;
    p->next =NULL;
-   p->state = READY;   //TODO: put it into ready queue
+   p->state = READY;
    PutBackToReadyQueue(p);
 }
 
@@ -210,7 +261,6 @@ void OS_Start()
    }
 }
 
-
 /**
   * This internal kernel function is the "main" driving loop of this full-served
   * model architecture. Basically, on OS_Start(), the kernel repeatedly
@@ -239,7 +289,22 @@ static void Next_Kernel_Request()
          case NEXT:
          case NONE:
             /* NONE could be caused by a timer interrupt */
-            if(cp->state != RUNNING) cp->state = READY;
+            counter++;
+            switch(cp->state){
+              case RUNNING:
+                printf("RUNNING\n");
+                break;
+              case READY:
+                printf("READY\n");
+                break;
+              case NONE:
+                printf("DEAD\n");
+                break;
+              default:
+                printf("BLOCKED\n");
+                break;
+            }
+            //if(cp->state != RUNNING) OS_Abort(4);
             PutBackToReadyQueue((PD *)cp);//TODO: put it back to ready queue
             Dispatch();
             break;
@@ -250,7 +315,7 @@ static void Next_Kernel_Request()
             break;
          default:
             /* Houston! we have a problem here! */
-            //TODO: abort
+            OS_Abort(3);
             break;
       }
    }
@@ -325,33 +390,39 @@ void Task_Terminate()
 /****IPC*****/
 //client thread
 void Msg_Send(PID id, MTYPE t, unsigned int *v){
-     PD *receiver;
+     PID receiver;
      //assign PD by id to receiver
      receiver = getProcess(id);
-     printf("enter send\n");
      if(receiver==NULL){
          return;
      }
 
-     if(receiver->state==RECEIVEBLOCKED){
-         receiver->rps.pid = Task_Pid();
+     if(Process[receiver].state==RECEIVEBLOCKED){
+         printf("receive block\n");
+         Process[receiver].rps.pid = Task_Pid();
          //message sent, receiver picks up message v
-         receiver->rps.v = *v;
+         Process[receiver].rps.v = *v;
          //message type
-         receiver->rps.t = t;
+         Process[receiver].rps.t = t;
          //client thread becomes reply blocks
          cp->state = REPLYBLOCKED;
-         receiver->state=READY;
-         enqueue(receiver->reply_queue, (PD *)cp);
-         printf("add receiver to ready queue\n");
-         PutBackToReadyQueue(receiver);
+         Process[receiver].state=READY;
+         enqueue(Process[receiver].reply_queue, (PD *)cp);
+         PutBackToReadyQueue(&Process[receiver]);
          Task_Next();
      }else{ /*receiver thread is not ready */
         //the client thread becomes sendblock
-         printf("send block\n");
+         printf("sender block\n");
          cp->state = SENDBLOCKED;
          //add receiver to the sender queue
-         enqueue(receiver->senders_queue, (PD *)cp);
+         
+         enqueue(Process[receiver].senders_queue, (PD *)cp);
+         //tmp = dequeue(receiver->senders_queue);
+         //printf("dequeue %p \n",(PD *)tmp);
+         //printf("AFTER ADDDING P: %p\n",Process[receiver].senders_queue->head);
+         //printf("length of receiver queue %p\n", receiver->senders_queue->head);
+         //printf("length of receiver queue %p\n", receiver->senders_queue->head);
+         //printf("length of receiver queue %p\n", receiver->senders_queue->head);
          Task_Next();
      }
      
@@ -364,17 +435,18 @@ void filter_unwantted_requests_for_msg_recv(struct Queue *queue, MASK m){
 		curr = curr->next;
 		// remove requests that we don't want
 		if(((unsigned int)tmp->rps.t & (unsigned int)m) == 0b00000000){
-            printf("remove unwanted");
 			RemoveQ(queue,tmp);
 		}
 	}
 }
 
 PID  Msg_Recv(MASK m, unsigned int *v ){
+      //printf("RECEIVER ADDRESS: %p\n",cp);
       PD *first_sender;
-      filter_unwantted_requests_for_msg_recv(cp->senders_queue,m);
+      //filter_unwantted_requests_for_msg_recv(cp->senders_queue,m);
+      //printf("length of queue %d\n", ItemsInQ(cp->senders_queue));
       first_sender = dequeue(cp->senders_queue);
-
+      //printf("sender address: %p\n",first_sender);
       //no client thread has done sent
       if(first_sender == NULL){
          printf("no sender\n");
@@ -382,15 +454,16 @@ PID  Msg_Recv(MASK m, unsigned int *v ){
          Task_Next();
          return cp->rps.pid;
       }else{
-         printf("find sender\n");
          first_sender->state=REPLYBLOCKED;
          //add to reply queue 
+         printf("message copy\n");
          enqueue(cp->reply_queue, first_sender);
          //check sender message type and MASK
          cp->rps.pid = first_sender->pid;
          cp->rps.v = first_sender->rps.v;
          cp->rps.t = first_sender->rps.t;
-         return  first_sender->pid;
+         printf("pidddd %d\n", first_sender->pid);
+         return first_sender->pid;
       }
      
 }
@@ -466,35 +539,26 @@ void Blink2()
 void Blink_IPC()
 {
   while(1){
-     send();
-     //printf("task1 IPC\n");
-	_delay_ms(2000);
-    //Task_Next();
+     send_message();
   }
 }
 void Blink2_IPC()
 {
   while(1){
-    receive();
-    //printf("task2 IPC\n");
-    _delay_ms(2000);
-    //_delay_ms(2000);
-    //Task_Next();
+    receive_message();
   }
 }
 
 
-void send(){
+void send_message(){
     unsigned int a=0;
-    Msg_Send(cp->pid, 'a', &a);
-    //printf("send 0");
+    Msg_Send(2, 1, &a);
 }
 
-void receive(){
+void receive_message(){
     unsigned int a=0;
     PID id = Msg_Recv(0xff,&a);
-    printf(id);
-    //printf("receive 0");
+    
 }
 
 //TEST System Process
@@ -531,9 +595,6 @@ int main()
    stdin = &uart_input;
    cli();
    DDRB=0x83;
-   lcd_init();
-   lcd_xy(0,0);
-   setupTimer();
    OS_Init();
    testIPC();
    sei();

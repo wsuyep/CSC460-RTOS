@@ -11,3 +11,4 @@ avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega2560 -c os.c -o os.o
 avr-gcc -mmcu=atmega2560 os.o cswitch.o lcd/lcd_drv.o -o os.elf
 avr-objcopy -O ihex -R .eeprom os.elf os.hex
 avrdude -v -p atmega2560 -c wiring -P /dev/cu.usbmodem1431 -b 115200 -D -U flash:w:os.hex:i
+

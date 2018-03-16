@@ -7,7 +7,20 @@
 *			U T I L S
 *********************************************************************************/
 
+
+static unsigned int ItemsInQ(struct Queue * queue){
+  unsigned int i = 0;
+  PD *curr = queue->head;
+  while(curr != NULL){
+      i++;
+      curr = curr->next;
+  }
+  return i;
+}
+
+
 void enqueue(struct Queue *queue, struct ProcessDescriptor *p){
+    //printf("enqueue pid: %p\n",p);
     if(queue->head==NULL){
         queue->head = p;
         queue->tail = p;
@@ -73,3 +86,8 @@ static void InitQueue(struct Queue *queue){
     queue->head = NULL;
     queue->tail = NULL;
 }
+
+
+
+
+
