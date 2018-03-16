@@ -66,8 +66,9 @@ PD *getProcess(PID id){
 
 void OS_Abort(unsigned int error){
   cli();
+  printf("Error with error code: %d\n", error);
   while(1){
-    printf("Error with error code: %d\n", error);
+    
   }
 }
 /********************************************************************************
@@ -110,6 +111,9 @@ static unsigned int ItemsInQ(struct Queue * queue){
 }
 
 static void PutBackToReadyQueue(PD* p){
+   if(p->pid >16 || p->pid <1){
+     OS_Abort(5);
+   }
    p->state = READY;
    counter++;
    printf("%d.Putting back to readyQ: %d : %d\n",counter,p->pid,p->priority);
@@ -256,6 +260,8 @@ void OS_Init()
    KernelActive = 0;
    NextP = 0;
 
+   cp->pid = 17;
+
    InitQueue(&SystemProcess);
    InitQueue(&PeriodicProcess);
    InitQueue(&RoundRobinProcess);
@@ -331,8 +337,10 @@ static void Next_Kernel_Request()
                 printf("BLOCKED\n");
                 break;
             }*/
-            if(cp->state != RUNNING) OS_Abort(4);
+            //if(cp->state != RUNNING) OS_Abort(4);
+            printf("BEFORE: %d\n",cp->pid);
             PutBackToReadyQueue((PD *)cp);//TODO: put it back to ready queue
+            printf("AFTER: %d\n",cp->pid);
             Dispatch();
             break;
          case TERMINATE:
@@ -438,9 +446,16 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          Task_Next();
      }else{ /*receiver thread is not ready */
         //the client thread becomes sendblock
+         printf("SENDING MESSAGE: %d\n",cp->pid);
          cp->state = SENDBLOCKED;
          //add receiver to the sender queue
+         printf("BEFORE ENQUEUE: %p\n",cp);
          enqueue(receiver->senders_queue, (PD *)cp);
+         PD* p = dequeue(receiver->senders_queue);
+         if(p == NULL){
+          printf("NULLLLLLLL\n");
+         }
+         printf("AFTER DEQUEUE: %p\n",p);
          Task_Next();
      }
      
@@ -522,27 +537,31 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
 ISR(TIMER4_COMPA_vect){
   ticks++;
   //counter++;
+  printf("INSIDE INTERRUPT SP:%p%p\n",cp->sp,cp->sp +1);
   //printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
   //printf("number of: %d\n",ItemsInQ(&PeriodicProcess));
   if (KernelActive) {
      cp ->kernel_request = NEXT;
-     Enter_Kernel();
+     PutBackToReadyQueue((PD *)cp);
+     Dispatch();
    }
 }
 
 void Blink()
 {
+  unsigned int a = 1;
   while(1){
-    PORTB=0x01;
-	  _delay_ms(200);
+
+    //Msg_Send(2,'a',&a);
     //Task_Next();
   }
 }
 void Blink2()
 {
   while(1){
-    PORTB=0x02;
-    _delay_ms(200);
+
+    //unsigned int a = 1;
+    //Msg_Recv('a',&a);
     //Task_Next();
   }
 }
@@ -553,14 +572,14 @@ int main()
    DDRB=0x83;
    lcd_init();
    lcd_xy(0,0);
-   setupTimer();
    OS_Init();
    uart_init();
    stdout = &uart_output;
    stdin = &uart_input;
    Task_Create_RR( Blink ,1);
+   Task_Create_RR( Blink2 ,1);
    Task_Create_Period( Blink ,1,4,1,0);
-   Task_Create_Period( Blink2,1,4,1,1);
+   setupTimer();
    sei();
    OS_Start();
    return -1;
