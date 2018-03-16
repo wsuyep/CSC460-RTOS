@@ -110,13 +110,57 @@ static unsigned int ItemsInQ(struct Queue * queue){
   return i;
 }
 
+void printAllItems(struct Queue *queue){
+     PD* curr = queue->head;
+     //printf("Stuff in Q: ");
+     while(curr != NULL){
+       //printf("  %d  ",curr->pid);
+       curr = curr->next;
+     }
+     printf("\n");
+   }
+
 static void PutBackToReadyQueue(PD* p){
    if(p->pid >16 || p->pid <1){
      OS_Abort(5);
    }
-   p->state = READY;
+     
+     counter++;
+     printf("%d.PUTTING BACK TO Q ID: %d  state: ",counter,p->pid);
+     switch(p->state){
+              case RUNNING:
+                printf("RUNNING\n");
+                break;
+              case READY:
+                printf("READY\n");
+                break;
+              case NONE:
+                printf("DEAD\n");
+                break;
+              default:
+                printf("BLOCKED\n");
+                break;
+            }
+   if(p->state == RUNNING) p->state = READY;
+   
+   printf("%d.AFTER BACK TO Q ID: %d  state: ",counter,p->pid);
+     switch(p->state){
+              case RUNNING:
+                printf("RUNNING\n");
+                break;
+              case READY:
+                printf("READY\n");
+                break;
+              case NONE:
+                printf("DEAD\n");
+                break;
+              default:
+                printf("BLOCKED\n");
+                break;
+            }
+
    //counter++;
-   printf("%d.Putting back to readyQ: %d : %d\n",counter,p->pid,p->priority);
+   //printf("%d.Putting back to readyQ: %d : %d\n",counter,p->pid,p->priority);
    switch(p->priority){
       case SYSTEM:
          //counter++;
@@ -133,9 +177,13 @@ static void PutBackToReadyQueue(PD* p){
          printf("%d.after adding items to Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
          break;
       case RR:
-         //counter++;
-         //printf("%d.before adding,items in RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
+         counter++;
+         printf("%d.before adding,items in RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
+         //printAllItems(&RoundRobinProcess);
+         //printf("enqueue head: %d    tail: %d\n",RoundRobinProcess.head->pid,RoundRobinProcess.tail->pid);
          enqueue(&RoundRobinProcess,p);
+         //printAllItems(&RoundRobinProcess);
+         //printf("after enqueue head: %d    tail: %d\n",RoundRobinProcess.head->pid,RoundRobinProcess.tail->pid);
          counter++;
          printf("%d.after adding item to RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
          break;
@@ -149,7 +197,13 @@ static PD *GetFirstNonBlockProcess(struct Queue *queue){
     PD *curr = queue->head;
     while(curr != NULL){
         if(curr->state == READY){
+           //printAllItems(&RoundRobinProcess);
+           //printf("remove queue head: %d    tail: %d\n",RoundRobinProcess.head->pid,RoundRobinProcess.tail->pid);
+           //printf("saljfie: %d\n",RoundRobinProcess.head->next->pid);
            RemoveQ(queue,curr);
+           //printf("saljfie: %d\n",RoundRobinProcess.head->next->pid);
+           //printAllItems(&RoundRobinProcess);
+           //printf("remove queue head: %d    tail: %d\n",RoundRobinProcess.head->pid,RoundRobinProcess.tail->pid);
            return curr; 
         }
         curr = curr->next;
@@ -205,7 +259,10 @@ static void Dispatch()
         break;
       }
     }
+    //counter++;
+    //printf("%d.Changing stack pointer from : %p %p",counter,CurrentSp,CurrentSp+1);
     CurrentSp = cp ->sp;
+    //printf("    to     %p %p\n",CurrentSp,CurrentSp+1);
     cp->state = RUNNING;
 }
 
@@ -399,7 +456,7 @@ void Task_Next()
 {
    if (KernelActive) {
       Disable_Interrupt();
-      cp ->kernel_request = NEXT;
+      cp -> kernel_request = NEXT;
       Enter_Kernel();
    }
 }
@@ -425,12 +482,42 @@ void Task_Terminate()
 /****IPC*****/
 //client thread
 void Msg_Send(PID id, MTYPE t, unsigned int *v){
-     PD *receiver;
      //assign PD by id to receiver
-     receiver = getProcess(id);
+     PD* receiver = &(Process[id-1]);
      if(receiver==NULL){
          OS_Abort(7);
      }
+     counter++;
+     printf("%d.SENDER ID: %d  state: ",counter,cp->pid);
+     switch(cp->state){
+              case RUNNING:
+                printf("RUNNING\n");
+                break;
+              case READY:
+                printf("READY\n");
+                break;
+              case NONE:
+                printf("DEAD\n");
+                break;
+              default:
+                printf("BLOCKED\n");
+                break;
+            }
+     printf("%d.RECEIVER ID: %d  state: ",counter,receiver->pid);
+     switch(receiver->state){
+              case RUNNING:
+                printf("RUNNING\n");
+                break;
+              case READY:
+                printf("READY\n");
+                break;
+              case NONE:
+                printf("DEAD\n");
+                break;
+              default:
+                printf("BLOCKED\n");
+                break;
+            }
 
      if(receiver->state==RECEIVEBLOCKED){
          receiver->rps.pid = Task_Pid();
@@ -449,13 +536,17 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          printf("SENDING MESSAGE: %d\n",cp->pid);
          cp->state = SENDBLOCKED;
          //add receiver to the sender queue
-         printf("BEFORE ENQUEUE: %p\n",cp);
-         enqueue(receiver->senders_queue, (PD *)cp);
-         PD* p = dequeue(receiver->senders_queue);
-         if(p == NULL){
-          printf("NULLLLLLLL\n");
-         }
-         printf("AFTER DEQUEUE: %p\n",p);
+         //InitQueue(receiver->senders_queue);
+         //printf("BEFORE ENQUEUE number of item in queue: %d\n",ItemsInQ(receiver->senders_queue));
+         //enqueue(receiver->senders_queue, (PD *)cp);
+         //printf("AFTER ENQUEUE number of item in queue: %d\n",ItemsInQ(receiver->senders_queue));
+         //PD* p = dequeue(receiver->senders_queue);
+         //if(p == NULL){
+         // printf("NULLLLLLLL\n");
+         //}
+         //printf("AFTER DEQUEUE: %p\n",p);
+
+         printf("CHECKING HERE\n");
          Task_Next();
      }
      
@@ -474,6 +565,7 @@ void filter_unwantted_requests_for_msg_recv(struct Queue *queue, MASK m){
 }
 
 PID  Msg_Recv(MASK m, unsigned int *v ){
+      printf("RECEIVING MESSAGE: %d\n",cp->pid);
       PD *first_sender;
       filter_unwantted_requests_for_msg_recv(cp->senders_queue,m);
       first_sender = dequeue(cp->senders_queue);
@@ -573,6 +665,27 @@ void Blink2()
   }
 }
 
+void Send(){
+  unsigned int a = 1;
+  while(1){
+    Msg_Send(2,'a',&a);
+    Task_Next();
+  }
+  
+}
+
+void Receive(){
+  unsigned int a = 1;
+  while(1){
+    //Disable_Interrupt();
+    //Msg_Recv('a',&a);
+    Task_Next();
+    //Enable_Interrupt();
+  }
+  
+  
+}
+
 int main() 
 {
    cli();
@@ -583,13 +696,17 @@ int main()
    uart_init();
    stdout = &uart_output;
    stdin = &uart_input;
-   //test case 1
+   //test case 
+   /*
    Task_Create_System( sys ,1);
    Task_Create_RR( Blink ,1);
    Task_Create_RR( Blink2 ,1);
    Task_Create_Period( Blink ,1,4,1,0);
    Task_Create_Period( Blink ,1,4,1,1);
-   setupTimer();
+   */
+   Task_Create_RR( Send ,1);
+   Task_Create_RR( Receive ,1);
+   //setupTimer();
    sei();
    OS_Start();
    return -1;
