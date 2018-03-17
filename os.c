@@ -24,7 +24,8 @@ static struct Queue PeriodicProcess;
 static struct Queue RoundRobinProcess;
 static struct Queue DeadPool;
 
-static struct Queue SendRequests;
+static struct Queue SendersQueue;
+static struct Queue ReplyQueue;
 
 volatile static unsigned int Tasks;
 
@@ -295,8 +296,8 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
    p->code = f;		/* function to be executed as a task */
    p->kernel_request = NONE;
    //InitQueue(p->senders_queue);
-   InitQueue(p->reply_queue);
-   p->senders_queue = &SendRequests;
+   p->reply_queue = &ReplyQueue;
+   p->senders_queue = &SendersQueue;
    p->rps.pid = 0;
    p->rps.v = 0;
    p->rps.r = 0;
@@ -483,6 +484,20 @@ void Task_Terminate()
 *			IPC SRR
 *********************************************************************************/
 
+PD* getFirstTypeMatchingProcess(struct Queue *queue, MASK m){
+  PD *curr = queue->head;
+  while(curr !=NULL){
+    //printf(" AJIOFJ DPAIAWFJEWIO QUEUE id: %d   t  :%d\n",curr->pid,curr->rps.t);
+    // remove requests that we don't want
+    if(((unsigned int)curr->rps.t & (unsigned int)m) != 0b00000000){
+      RemoveQ(queue,curr);
+      return curr;
+    }
+    curr = curr->next;
+  }
+  return NULL;
+}
+
 /****IPC*****/
 //client thread
 void Msg_Send(PID id, MTYPE t, unsigned int *v){
@@ -543,30 +558,27 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          //add receiver to the sender queue
          enqueue(receiver->senders_queue, (PD *)cp);
          //printf("sender queue address %d\n", &(Process[1].senders_queue));
+         cp->rps.pid = cp->pid;
+         cp->rps.v = *v;
+         cp->rps.t = t;
+         cp->rps.status = 1;
          Task_Next();
+
+         //we will be back here if receives reply
+         printf("IM BACK  reply    r: %d    status: %d\n",cp->rps.r,cp->rps.status);
      }
      
 }
 
-void filter_unwantted_requests_for_msg_recv(struct Queue *queue, MASK m){
-	struct ProcessDescriptor *curr = queue->head;
-	while(curr !=NULL){
-		struct ProcessDescriptor *tmp = curr;
-		curr = curr->next;
-		// remove requests that we don't want
-		if(((unsigned int)tmp->rps.t & (unsigned int)m) == 0b00000000){
-			RemoveQ(queue,tmp);
-		}
-	}
-}
 
 PID  Msg_Recv(MASK m, unsigned int *v ){
 
       //printf("RECEIVING MESSAGE: %d\n",cp->pid);
       PD *first_sender;
+      //TODO FILTER
       //filter_unwantted_requests_for_msg_recv(cp->senders_queue,m);
       //printf("length of queue %d\n", ItemsInQ(cp->senders_queue));
-      first_sender = dequeue(cp->senders_queue);
+      first_sender = getFirstTypeMatchingProcess(cp->senders_queue,m);
       printf("sender queue pid at RECV %d\n\n", first_sender->pid);
       //no client thread has done sent
       if(first_sender == NULL){
@@ -583,6 +595,7 @@ PID  Msg_Recv(MASK m, unsigned int *v ){
          cp->rps.pid = first_sender->pid;
          cp->rps.v = first_sender->rps.v;
          cp->rps.t = first_sender->rps.t;
+         printf("RECIEVED MSG: sender: %d     v:   %d\n",first_sender->pid,first_sender->rps.v);
          return first_sender->pid;
       }
      
@@ -598,8 +611,11 @@ void Msg_Rply(PID id, unsigned int r ){
         //current reply to sender
         RemoveQ(cp->reply_queue, sender);
         sender->rps.r=r;
+        sender->rps.status = 3;
         sender->state = READY;
+        Task_Next();
         //TODO sechduler adds sender to Ready queue 
+        printf("REPLY DONE\n");
     }
 }
 
@@ -689,22 +705,19 @@ void Blink2_IPC()
 }
 
 void Send(){
-  unsigned int a = 1;
-  while(1){
-    Msg_Send(2,'a',&a);
-    Task_Next();
+  unsigned int a = 49;
+  Msg_Send(2,'a',&a);
+  //Task_Next();
 
-  }
 }
 
 void Receive(){
   unsigned int a = 1;
-  while(1){
     //Disable_Interrupt();
-    //Msg_Recv('a',&a);
-    Task_Next();
+  PID sender = Msg_Recv('a',&a);
+  Msg_Rply(sender, 94);
+  //Task_Next();
     //Enable_Interrupt();
-  } 
 }
 
 //TEST System Process
@@ -743,7 +756,8 @@ int main()
    cli();
    DDRB=0x83;
    OS_Init();
-   testIPC();
+   Task_Create_System(Send, 1);
+   Task_Create_System(Receive, 1);
    sei();
    OS_Start();
    return -1;
