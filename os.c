@@ -24,9 +24,8 @@ static struct Queue PeriodicProcess;
 static struct Queue RoundRobinProcess;
 static struct Queue DeadPool;
 
-volatile static unsigned int NumSysTasks;
-volatile static unsigned int NumPeriodTasks;
-volatile static unsigned int NumRRTasks;
+static struct Queue SendRequests;
+
 volatile static unsigned int Tasks;
 
 volatile static PD* cp;
@@ -69,8 +68,9 @@ int getProcess(PID id){
 
 void OS_Abort(unsigned int error){
   cli();
+  printf("Error with error code: %d\n", error);
   while(1){
-    printf("Error with error code: %d\n", error);
+    
   }
 }
 /********************************************************************************
@@ -102,20 +102,92 @@ void setupTimer(){
 
 }
 
+static unsigned int ItemsInQ(struct Queue * queue){
+  unsigned int i = 0;
+  PD *curr = queue->head;
+  while(curr != NULL){
+      i++;
+      curr = curr->next;
+  }
+  return i;
+}
+
+void printAllItems(struct Queue *queue){
+     PD* curr = queue->head;
+     //printf("Stuff in Q: ");
+     while(curr != NULL){
+       //printf("  %d  ",curr->pid);
+       curr = curr->next;
+     }
+     printf("\n");
+   }
+
 static void PutBackToReadyQueue(PD* p){
-   p->state = READY;
-   counter++;
+   if(p->pid >16 || p->pid <1){
+     OS_Abort(5);
+   }
+     
+     counter++;
+     printf("%d.PUTTING BACK TO Q ID: %d  state: ",counter,p->pid);
+     switch(p->state){
+              case RUNNING:
+                printf("RUNNING\n");
+                break;
+              case READY:
+                printf("READY\n");
+                break;
+              case NONE:
+                printf("DEAD\n");
+                break;
+              default:
+                printf("BLOCKED\n");
+                break;
+            }
+   if(p->state == RUNNING) p->state = READY;
+   
+   printf("%d.AFTER BACK TO Q ID: %d  state: ",counter,p->pid);
+     switch(p->state){
+              case RUNNING:
+                printf("RUNNING\n");
+                break;
+              case READY:
+                printf("READY\n");
+                break;
+              case NONE:
+                printf("DEAD\n");
+                break;
+              default:
+                printf("BLOCKED\n");
+                break;
+            }
+
+   //counter++;
+   //printf("%d.Putting back to readyQ: %d : %d\n",counter,p->pid,p->priority);
    switch(p->priority){
       case SYSTEM:
-         counter++;
+         //counter++;
+         //printf("%d.before adding,items in System queue: %d\n",counter,ItemsInQ(&SystemProcess));
          enqueue(&SystemProcess,p);
          counter++;
+         printf("%d.after adding item to System queue: %d\n",counter,ItemsInQ(&SystemProcess));
          break;
       case PERIODIC:
-         enqueue(&PeriodicProcess,p);
+         counter++;
+         printf("%d.before adding,items in Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
+         //enqueue(&PeriodicProcess,p);
+         counter++;
+         printf("%d.after adding items to Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
          break;
       case RR:
+         counter++;
+         printf("%d.before adding,items in RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
+         //printAllItems(&RoundRobinProcess);
+         //printf("enqueue head: %d    tail: %d\n",RoundRobinProcess.head->pid,RoundRobinProcess.tail->pid);
          enqueue(&RoundRobinProcess,p);
+         //printAllItems(&RoundRobinProcess);
+         //printf("after enqueue head: %d    tail: %d\n",RoundRobinProcess.head->pid,RoundRobinProcess.tail->pid);
+         counter++;
+         printf("%d.after adding item to RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
          break;
       default:
          //OS_Abort(2);
@@ -127,7 +199,13 @@ static PD *GetFirstNonBlockProcess(struct Queue *queue){
     PD *curr = queue->head;
     while(curr != NULL){
         if(curr->state == READY){
+           //printAllItems(&RoundRobinProcess);
+           //printf("remove queue head: %d    tail: %d\n",RoundRobinProcess.head->pid,RoundRobinProcess.tail->pid);
+           //printf("saljfie: %d\n",RoundRobinProcess.head->next->pid);
            RemoveQ(queue,curr);
+           //printf("saljfie: %d\n",RoundRobinProcess.head->next->pid);
+           //printAllItems(&RoundRobinProcess);
+           //printf("remove queue head: %d    tail: %d\n",RoundRobinProcess.head->pid,RoundRobinProcess.tail->pid);
            return curr; 
         }
         curr = curr->next;
@@ -140,6 +218,8 @@ static PD *GetFirstNonBlockPeriodicProcess(){
     PD * curr = PeriodicProcess.head;
     PD * readyTask = NULL;
     while(curr != NULL){
+      counter++;
+      printf("%d.tick: %d offset: %d period: %d   answer: %d\n",counter,ticks,curr->offset,curr->period,(ticks - curr->offset)%curr->period);
       if((ticks - curr->offset)%curr->period == 0){
         readyTask = curr;
         readyCount ++;
@@ -160,27 +240,31 @@ static void Dispatch()
        * Note: if there is no READY task, then this will loop forever!.
        */
     while(1){
-      counter++;
+      //counter++;
+      //printf("%d.Looking for new task ",counter);
       cp = GetFirstNonBlockProcess(&SystemProcess);
       if(cp){
         counter++;
-        printf("%d.Found system task: %d\n",counter,cp->pid);
+        printf("%d.Selected new system task: %d\n",counter,cp->pid);
         break;
       }
       cp = GetFirstNonBlockPeriodicProcess();
       if(cp) {
         counter++;
-        printf("%d.Found periodic task: %d\n",counter, cp->pid);
+        printf("%d.Selected new periodic task: %d\n",counter, cp->pid);
         break;
       }
       cp = GetFirstNonBlockProcess(&RoundRobinProcess);
       if(cp) {
         counter++;
-        printf("%d.Found RR task: %d\n",counter,cp->pid);
+        printf("%d.Selected new RR task: %d\n",counter,cp->pid);
         break;
       }
     }
+    //counter++;
+    //printf("%d.Changing stack pointer from : %p %p",counter,CurrentSp,CurrentSp+1);
     CurrentSp = cp ->sp;
+    //printf("    to     %p %p\n",CurrentSp,CurrentSp+1);
     cp->state = RUNNING;
 }
 
@@ -210,8 +294,9 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
    p->sp = sp;		/* stack pointer into the "workSpace" */
    p->code = f;		/* function to be executed as a task */
    p->kernel_request = NONE;
-   InitQueue(p->senders_queue);
+   //InitQueue(p->senders_queue);
    InitQueue(p->reply_queue);
+   p->senders_queue = &SendRequests;
    p->rps.pid = 0;
    p->rps.v = 0;
    p->rps.r = 0;
@@ -234,6 +319,8 @@ void OS_Init()
    KernelActive = 0;
    NextP = 0;
 
+   cp->pid = 17;
+
    InitQueue(&SystemProcess);
    InitQueue(&PeriodicProcess);
    InitQueue(&RoundRobinProcess);
@@ -252,6 +339,7 @@ void OS_Start()
 {   
    if ( (! KernelActive) && (Tasks > 0)) {
        Disable_Interrupt();
+       printf("-------STARTING OS--------\n\n\n");
       /* we may have to initialize the interrupt vector for Enter_Kernel() here. */
 
       /* here we go...  */
@@ -279,6 +367,8 @@ static void Next_Kernel_Request()
       /* activate this newly selected task */
       CurrentSp = cp->sp;
       Exit_Kernel();    /* or CSwitch() */
+      //counter++;
+      //printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
 
       /* if this task makes a system call, it will return to here! */
 
@@ -289,7 +379,9 @@ static void Next_Kernel_Request()
          case NEXT:
          case NONE:
             /* NONE could be caused by a timer interrupt */
+            /*
             counter++;
+            printf("%d.entered kernel, and cp id: %d  state is:",counter,cp->pid);
             switch(cp->state){
               case RUNNING:
                 printf("RUNNING\n");
@@ -305,7 +397,10 @@ static void Next_Kernel_Request()
                 break;
             }
             //if(cp->state != RUNNING) OS_Abort(4);
+            }*/
+            printf("BEFORE: %d\n",cp->pid);
             PutBackToReadyQueue((PD *)cp);//TODO: put it back to ready queue
+            printf("AFTER: %d\n",cp->pid);
             Dispatch();
             break;
          case TERMINATE:
@@ -323,29 +418,29 @@ static void Next_Kernel_Request()
 
 PID Task_Create_System(void (*f)(void), int arg){
    if (Tasks == MAXTHREAD || DeadPool.head == NULL) return 0;
-   Disable_Interrupt();
+   if(KernelActive) Disable_Interrupt();
    PD *new_p = dequeue(&DeadPool);
    new_p->priority = SYSTEM;
    new_p->arg = arg;
    Kernel_Create_Task_At( new_p, f );
-   Enable_Interrupt();
+   if(KernelActive) Enable_Interrupt();
    return new_p->pid;
 }
 
 PID Task_Create_RR(void (*f)(void), int arg){
    if (Tasks == MAXTHREAD || DeadPool.head == NULL) return 0;
-   Disable_Interrupt();
+   if(KernelActive) Disable_Interrupt();
    PD *new_p = dequeue(&DeadPool);
    new_p->priority = RR;
    new_p->arg = arg;
    Kernel_Create_Task_At( new_p, f );
-   Enable_Interrupt();
+   if(KernelActive) Enable_Interrupt();
    return new_p->pid;
 }
 
 PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK offset){
    if (Tasks == MAXTHREAD || DeadPool.head == NULL) return 0;
-   Disable_Interrupt();
+   if(KernelActive) Disable_Interrupt();
    PD *new_p = dequeue(&DeadPool);
    new_p->priority = PERIODIC;
    new_p->arg = arg;
@@ -353,7 +448,8 @@ PID Task_Create_Period(void (*f)(void), int arg, TICK period, TICK wcet, TICK of
    new_p->period = period;
    new_p->offset = offset;
    Kernel_Create_Task_At( new_p, f );
-   Enable_Interrupt();
+   enqueue(&PeriodicProcess,new_p);
+   if(KernelActive) Enable_Interrupt();
    return new_p->pid;
 }
 
@@ -364,7 +460,7 @@ void Task_Next()
 {
    if (KernelActive) {
       Disable_Interrupt();
-      cp ->kernel_request = NEXT;
+      cp -> kernel_request = NEXT;
       Enter_Kernel();
    }
 }
@@ -390,12 +486,43 @@ void Task_Terminate()
 /****IPC*****/
 //client thread
 void Msg_Send(PID id, MTYPE t, unsigned int *v){
-     PID receiver;
+     int receiver;
      //assign PD by id to receiver
      receiver = getProcess(id);
      if(receiver==NULL){
-         return;
+         OS_Abort(7);
      }
+     counter++;
+     printf("%d.SENDER ID: %d  state: ",counter,cp->pid);
+     switch(cp->state){
+              case RUNNING:
+                printf("RUNNING\n");
+                break;
+              case READY:
+                printf("READY\n");
+                break;
+              case NONE:
+                printf("DEAD\n");
+                break;
+              default:
+                printf("BLOCKED\n");
+                break;
+            }
+     printf("%d.RECEIVER ID: %d  state: ",counter,Process[receiver].pid);
+     switch(Process[receiver].state){
+              case RUNNING:
+                printf("RUNNING\n");
+                break;
+              case READY:
+                printf("READY\n");
+                break;
+              case NONE:
+                printf("DEAD\n");
+                break;
+              default:
+                printf("BLOCKED\n");
+                break;
+            }
 
      if(Process[receiver].state==RECEIVEBLOCKED){
          printf("receive block\n");
@@ -415,14 +542,8 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          printf("sender block\n");
          cp->state = SENDBLOCKED;
          //add receiver to the sender queue
-         
          enqueue(Process[receiver].senders_queue, (PD *)cp);
-         //tmp = dequeue(receiver->senders_queue);
-         //printf("dequeue %p \n",(PD *)tmp);
-         //printf("AFTER ADDDING P: %p\n",Process[receiver].senders_queue->head);
-         //printf("length of receiver queue %p\n", receiver->senders_queue->head);
-         //printf("length of receiver queue %p\n", receiver->senders_queue->head);
-         //printf("length of receiver queue %p\n", receiver->senders_queue->head);
+         //printf("sender queue address %d\n", &(Process[1].senders_queue));
          Task_Next();
      }
      
@@ -441,12 +562,13 @@ void filter_unwantted_requests_for_msg_recv(struct Queue *queue, MASK m){
 }
 
 PID  Msg_Recv(MASK m, unsigned int *v ){
-      //printf("RECEIVER ADDRESS: %p\n",cp);
+
+      //printf("RECEIVING MESSAGE: %d\n",cp->pid);
       PD *first_sender;
       //filter_unwantted_requests_for_msg_recv(cp->senders_queue,m);
       //printf("length of queue %d\n", ItemsInQ(cp->senders_queue));
       first_sender = dequeue(cp->senders_queue);
-      //printf("sender address: %p\n",first_sender);
+      printf("sender queue pid at RECV %d\n\n", first_sender->pid);
       //no client thread has done sent
       if(first_sender == NULL){
          printf("no sender\n");
@@ -456,13 +578,12 @@ PID  Msg_Recv(MASK m, unsigned int *v ){
       }else{
          first_sender->state=REPLYBLOCKED;
          //add to reply queue 
-         printf("message copy\n");
+         //printf("message copy\n");
          enqueue(cp->reply_queue, first_sender);
          //check sender message type and MASK
          cp->rps.pid = first_sender->pid;
          cp->rps.v = first_sender->rps.v;
          cp->rps.t = first_sender->rps.t;
-         printf("pidddd %d\n", first_sender->pid);
          return first_sender->pid;
       }
      
@@ -472,7 +593,10 @@ void Msg_Rply(PID id, unsigned int r ){
     PD *sender;
     //set current cp to sender
     sender = getProcess(id);
-    if(sender != NULL && InQueue(cp->reply_queue,sender)){
+    if(sender == NULL){
+      OS_Abort(8);
+    }
+    if(InQueue(cp->reply_queue,sender)){
         //current reply to sender
         RemoveQ(cp->reply_queue, sender);
         sender->rps.r=r;
@@ -486,7 +610,7 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
      PD *receiver;
      receiver = getProcess(id);
      if(receiver==NULL){
-         return;
+         OS_Abort(9);
      }
      //if p is waiting on receive
      if(receiver->state==RECEIVEBLOCKED){
@@ -507,33 +631,39 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
 *********************************************************************************/
 
 ISR(TIMER4_COMPA_vect){
-
+  ticks++;
+  //counter++;
+  //printf("INSIDE INTERRUPT SP:%p%p\n",cp->sp,cp->sp +1);
+  //printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
+  //printf("number of: %d\n",ItemsInQ(&PeriodicProcess));
   if (KernelActive) {
      cp ->kernel_request = NEXT;
-     Enter_Kernel();
+     PutBackToReadyQueue((PD *)cp);
+     Dispatch();
    }
     
 }
 
+void sys(){
+  cli();
+  sei();
+}
 void Blink()
 {
+  unsigned int a = 1;
   while(1){
-    
-     printf("task1");
-	_delay_ms(2000);
-    //Task_Next();
+
   }
 }
 void Blink2()
 {
   while(1){
-    
+
     printf("task2");
     _delay_ms(2000);
-    //_delay_ms(2000);
-    //Task_Next();
   }
 }
+
 
 //TEST IPC
 void Blink_IPC()
@@ -546,7 +676,27 @@ void Blink2_IPC()
 {
   while(1){
     receive_message();
+  
   }
+}
+
+void Send(){
+  unsigned int a = 1;
+  while(1){
+    Msg_Send(2,'a',&a);
+    Task_Next();
+
+  }
+}
+
+void Receive(){
+  unsigned int a = 1;
+  while(1){
+    //Disable_Interrupt();
+    //Msg_Recv('a',&a);
+    Task_Next();
+    //Enable_Interrupt();
+  } 
 }
 
 
@@ -558,7 +708,7 @@ void send_message(){
 void receive_message(){
     unsigned int a=0;
     PID id = Msg_Recv(0xff,&a);
-    
+    printf("final return pid %d\n\n", id);
 }
 
 //TEST System Process
@@ -586,6 +736,7 @@ void testIPC(){
     
     Task_Create_System(Blink_IPC, 1);
     Task_Create_System(Blink2_IPC, 1);
+    
 }
 
 int main() 

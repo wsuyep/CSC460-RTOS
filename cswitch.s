@@ -199,6 +199,7 @@ Enter_Kernel:
           */ 
         lds  r30, KernelSp
         lds  r31, KernelSp+1
+        
         out  SPL, r30
         out  SPH, r31
         /*

@@ -8,16 +8,6 @@
 *********************************************************************************/
 
 
-static unsigned int ItemsInQ(struct Queue * queue){
-  unsigned int i = 0;
-  PD *curr = queue->head;
-  while(curr != NULL){
-      i++;
-      curr = curr->next;
-  }
-  return i;
-}
-
 
 void enqueue(struct Queue *queue, struct ProcessDescriptor *p){
     //printf("enqueue pid: %p\n",p);
@@ -52,9 +42,10 @@ static PD *dequeue(struct Queue *queue)
 
 static void RemoveQ(struct Queue *queue, struct ProcessDescriptor *p)
 {
-    struct ProcessDescriptor *curr, *prev;
+    struct ProcessDescriptor *curr,*prev;
 
-    if(queue->head ==NULL) return;     /* empty queue */
+    if(queue->head ==NULL) OS_Abort(10);     /* empty queue */
+
     if(queue->head == p){         /* head of queue */
         queue->head = p->next;
         p->next = NULL;
@@ -68,6 +59,9 @@ static void RemoveQ(struct Queue *queue, struct ProcessDescriptor *p)
         if(curr == p) {         /* found it */
             prev->next = p->next;
             p->next = NULL;
+            if(curr == queue->tail){
+                queue->tail = prev;
+            }
         }
     }
     if (queue->head == NULL) queue->tail = NULL;
