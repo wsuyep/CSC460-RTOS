@@ -127,7 +127,7 @@ static void PutBackToReadyQueue(PD* p){
    if(p->pid >16 || p->pid <1){
      OS_Abort(5);
    }
-     
+     /*
      counter++;
      printf("%d.PUTTING BACK TO Q ID: %d  state: ",counter,p->pid);
      switch(p->state){
@@ -143,9 +143,10 @@ static void PutBackToReadyQueue(PD* p){
               default:
                 printf("BLOCKED\n");
                 break;
-            }
+            }*/
    if(p->state == RUNNING) p->state = READY;
    
+   /*
    printf("%d.AFTER BACK TO Q ID: %d  state: ",counter,p->pid);
      switch(p->state){
               case RUNNING:
@@ -160,7 +161,7 @@ static void PutBackToReadyQueue(PD* p){
               default:
                 printf("BLOCKED\n");
                 break;
-            }
+            }*/
 
    //counter++;
    //printf("%d.Putting back to readyQ: %d : %d\n",counter,p->pid,p->priority);
@@ -169,26 +170,26 @@ static void PutBackToReadyQueue(PD* p){
          //counter++;
          //printf("%d.before adding,items in System queue: %d\n",counter,ItemsInQ(&SystemProcess));
          enqueue(&SystemProcess,p);
-         counter++;
-         printf("%d.after adding item to System queue: %d\n",counter,ItemsInQ(&SystemProcess));
+         //counter++;
+         //printf("%d.after adding item to System queue: %d\n",counter,ItemsInQ(&SystemProcess));
          break;
       case PERIODIC:
-         counter++;
-         printf("%d.before adding,items in Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
+         //counter++;
+         //printf("%d.before adding,items in Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
          //enqueue(&PeriodicProcess,p);
-         counter++;
-         printf("%d.after adding items to Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
+         //counter++;
+         //printf("%d.after adding items to Period queue: %d\n",counter,ItemsInQ(&PeriodicProcess));
          break;
       case RR:
-         counter++;
-         printf("%d.before adding,items in RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
+         //counter++;
+         //printf("%d.before adding,items in RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
          //printAllItems(&RoundRobinProcess);
          //printf("enqueue head: %d    tail: %d\n",RoundRobinProcess.head->pid,RoundRobinProcess.tail->pid);
          enqueue(&RoundRobinProcess,p);
          //printAllItems(&RoundRobinProcess);
          //printf("after enqueue head: %d    tail: %d\n",RoundRobinProcess.head->pid,RoundRobinProcess.tail->pid);
-         counter++;
-         printf("%d.after adding item to RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
+         //counter++;
+         //printf("%d.after adding item to RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
          break;
       default:
          //OS_Abort(2);
@@ -240,6 +241,10 @@ static void Dispatch()
      /* find the next READY task
        * Note: if there is no READY task, then this will loop forever!.
        */
+    counter++;
+    printf("%d.SystemQueue Length: %d\n",counter,ItemsInQ(&SystemProcess));
+    printf("%d.PeriodicQueue Length: %d\n",counter,ItemsInQ(&PeriodicProcess));
+    printf("%d.RRQueue Length: %d\n",counter,ItemsInQ(&RoundRobinProcess));
     while(1){
       //counter++;
       //printf("%d.Looking for new task ",counter);
@@ -265,7 +270,8 @@ static void Dispatch()
     //counter++;
     //printf("%d.Changing stack pointer from : %p %p",counter,CurrentSp,CurrentSp+1);
     CurrentSp = cp ->sp;
-    //printf("    to     %p %p\n",CurrentSp,CurrentSp+1);
+
+    printf("CP: %d   SP:%p\n",cp->pid,CurrentSp);
     cp->state = RUNNING;
 }
 
@@ -473,7 +479,9 @@ void Task_Terminate()
 {
    if (KernelActive) {
       Disable_Interrupt();
+      printf("TERMINATING TASK: %d\n",cp->pid);
       cp -> kernel_request = TERMINATE;
+      cp -> state = DEAD;
       Enter_Kernel();
       /* never returns here! */
    }
@@ -507,7 +515,7 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          OS_Abort(7);
      }
      counter++;
-     printf("%d.SENDER ID: %d  state: ",counter,cp->pid);
+     //printf("%d.SENDER ID: %d  state: ",counter,cp->pid);
      switch(cp->state){
               case RUNNING:
                 printf("RUNNING\n");
@@ -539,7 +547,7 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
             }
 
      if(receiver->state==RECEIVEBLOCKED){
-         printf("receive block\n");
+         //printf("receive block\n");
          receiver->rps.pid = Task_Pid();
          //message sent, receiver picks up message v
          receiver->rps.v = *v;
@@ -553,7 +561,7 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          Task_Next();
      }else{ /*receiver thread is not ready */
         //the client thread becomes sendblock
-         printf("sender block\n");
+         //printf("sender block\n");
          cp->state = SENDBLOCKED;
          //add receiver to the sender queue
          enqueue(receiver->senders_queue, (PD *)cp);
@@ -565,7 +573,7 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          Task_Next();
 
          //we will be back here if receives reply
-         printf("IM BACK  reply    r: %d    status: %d\n",cp->rps.r,cp->rps.status);
+         //printf("IM BACK  reply    r: %d    status: %d\n",cp->rps.r,cp->rps.status);
      }
      
 }
@@ -579,10 +587,10 @@ PID  Msg_Recv(MASK m, unsigned int *v ){
       //filter_unwantted_requests_for_msg_recv(cp->senders_queue,m);
       //printf("length of queue %d\n", ItemsInQ(cp->senders_queue));
       first_sender = getFirstTypeMatchingProcess(cp->senders_queue,m);
-      printf("sender queue pid at RECV %d\n\n", first_sender->pid);
+      //printf("sender queue pid at RECV %d\n\n", first_sender->pid);
       //no client thread has done sent
       if(first_sender == NULL){
-         printf("no sender\n");
+         //printf("no sender\n");
          cp->state = RECEIVEBLOCKED;
          Task_Next();
          return cp->rps.pid;
@@ -595,7 +603,7 @@ PID  Msg_Recv(MASK m, unsigned int *v ){
          cp->rps.pid = first_sender->pid;
          cp->rps.v = first_sender->rps.v;
          cp->rps.t = first_sender->rps.t;
-         printf("RECIEVED MSG: sender: %d     v:   %d\n",first_sender->pid,first_sender->rps.v);
+         //printf("RECIEVED MSG: sender: %d     v:   %d\n",first_sender->pid,first_sender->rps.v);
          return first_sender->pid;
       }
      
@@ -615,7 +623,7 @@ void Msg_Rply(PID id, unsigned int r ){
         sender->state = READY;
         Task_Next();
         //TODO sechduler adds sender to Ready queue 
-        printf("REPLY DONE\n");
+        //printf("REPLY DONE\n");
     }
 }
 
@@ -645,11 +653,12 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
 
 ISR(TIMER4_COMPA_vect){
   ticks++;
-  //counter++;
+  counter++;
   //printf("INSIDE INTERRUPT SP:%p%p\n",cp->sp,cp->sp +1);
-  //printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
+  printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
   //printf("number of: %d\n",ItemsInQ(&PeriodicProcess));
-  if (KernelActive) {
+
+  if (KernelActive && cp->priority != 3) {
      cp ->kernel_request = NEXT;
      PutBackToReadyQueue((PD *)cp);
      Dispatch();
@@ -658,8 +667,13 @@ ISR(TIMER4_COMPA_vect){
 }
 
 void sys(){
-  cli();
-  sei();
+  Task_Terminate();
+}
+void sys2(){
+  Disable_Interrupt();
+  printf("IN SYS2: %d\n",cp->pid);
+  Enable_Interrupt();
+  Task_Terminate();
 }
 void Blink()
 {
@@ -672,7 +686,7 @@ void Blink2()
 {
   while(1){
 
-    printf("task2");
+    //printf("task2");
     _delay_ms(2000);
   }
 }
@@ -721,15 +735,20 @@ void Receive(){
 }
 
 //TEST System Process
+// test preemption and priority
 void test1(){
-   Task_Create_System( Blink,1);
-   Task_Create_System( Blink2,1 );
+   Task_Create_System( sys,1);
+   Task_Create_System( sys,1);
+   Task_Create_Period( Blink, 1, 4,1,0);
+   Task_Create_Period( Blink2, 1, 4,1,1);
+   Task_Create_RR(Blink, 1);
+   Task_Create_RR(Blink, 1);
 }
 
-//TEST RR
+//TEST Send Receive Reply
 void test2(){
-   Task_Create_RR( Blink, 1);
-   //Task_Create_System( Blink2,1 );
+   Task_Create_System(Send, 1);
+   Task_Create_System(Receive, 1);
 }
 
 //TEST MAXProcess
@@ -756,8 +775,8 @@ int main()
    cli();
    DDRB=0x83;
    OS_Init();
-   Task_Create_System(Send, 1);
-   Task_Create_System(Receive, 1);
+   test1();
+   setupTimer();
    sei();
    OS_Start();
    return -1;
