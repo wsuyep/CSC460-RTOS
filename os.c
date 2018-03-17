@@ -398,9 +398,9 @@ static void Next_Kernel_Request()
             }
             //if(cp->state != RUNNING) OS_Abort(4);
             }*/
-            printf("BEFORE: %d\n",cp->pid);
+            //printf("BEFORE: %d\n",cp->pid);
             PutBackToReadyQueue((PD *)cp);//TODO: put it back to ready queue
-            printf("AFTER: %d\n",cp->pid);
+            //printf("AFTER: %d\n",cp->pid);
             Dispatch();
             break;
          case TERMINATE:
@@ -486,9 +486,8 @@ void Task_Terminate()
 /****IPC*****/
 //client thread
 void Msg_Send(PID id, MTYPE t, unsigned int *v){
-     int receiver;
      //assign PD by id to receiver
-     receiver = getProcess(id);
+     PD *receiver = &(Process[id-1]);
      if(receiver==NULL){
          OS_Abort(7);
      }
@@ -508,8 +507,8 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
                 printf("BLOCKED\n");
                 break;
             }
-     printf("%d.RECEIVER ID: %d  state: ",counter,Process[receiver].pid);
-     switch(Process[receiver].state){
+     printf("%d.RECEIVER ID: %d  state: ",counter,receiver->pid);
+     switch(receiver->state){
               case RUNNING:
                 printf("RUNNING\n");
                 break;
@@ -524,25 +523,25 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
                 break;
             }
 
-     if(Process[receiver].state==RECEIVEBLOCKED){
+     if(receiver->state==RECEIVEBLOCKED){
          printf("receive block\n");
-         Process[receiver].rps.pid = Task_Pid();
+         receiver->rps.pid = Task_Pid();
          //message sent, receiver picks up message v
-         Process[receiver].rps.v = *v;
+         receiver->rps.v = *v;
          //message type
-         Process[receiver].rps.t = t;
+         receiver->rps.t = t;
          //client thread becomes reply blocks
          cp->state = REPLYBLOCKED;
-         Process[receiver].state=READY;
-         enqueue(Process[receiver].reply_queue, (PD *)cp);
-         PutBackToReadyQueue(&Process[receiver]);
+         receiver->state=READY;
+         enqueue(receiver->reply_queue, (PD *)cp);
+         PutBackToReadyQueue(receiver);
          Task_Next();
      }else{ /*receiver thread is not ready */
         //the client thread becomes sendblock
          printf("sender block\n");
          cp->state = SENDBLOCKED;
          //add receiver to the sender queue
-         enqueue(Process[receiver].senders_queue, (PD *)cp);
+         enqueue(receiver->senders_queue, (PD *)cp);
          //printf("sender queue address %d\n", &(Process[1].senders_queue));
          Task_Next();
      }
@@ -590,9 +589,8 @@ PID  Msg_Recv(MASK m, unsigned int *v ){
 }
 
 void Msg_Rply(PID id, unsigned int r ){
-    PD *sender;
     //set current cp to sender
-    sender = getProcess(id);
+    PD *sender = &(Process[id-1]);
     if(sender == NULL){
       OS_Abort(8);
     }
@@ -607,8 +605,7 @@ void Msg_Rply(PID id, unsigned int r ){
 
 //Asynchronous Communication
 void Msg_ASend(PID id, MTYPE t, unsigned int v ){
-     PD *receiver;
-     receiver = getProcess(id);
+     PD *receiver = &(Process[id-1]);
      if(receiver==NULL){
          OS_Abort(9);
      }
@@ -664,6 +661,17 @@ void Blink2()
   }
 }
 
+void send_message(){
+    unsigned int a=0;
+    Msg_Send(2, 1, &a);
+}
+
+void receive_message(){
+    unsigned int a=0;
+    PID id = Msg_Recv(0xff,&a);
+    printf("final return pid %d\n\n", id);
+}
+
 
 //TEST IPC
 void Blink_IPC()
@@ -697,18 +705,6 @@ void Receive(){
     Task_Next();
     //Enable_Interrupt();
   } 
-}
-
-
-void send_message(){
-    unsigned int a=0;
-    Msg_Send(2, 1, &a);
-}
-
-void receive_message(){
-    unsigned int a=0;
-    PID id = Msg_Recv(0xff,&a);
-    printf("final return pid %d\n\n", id);
 }
 
 //TEST System Process
