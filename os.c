@@ -192,7 +192,7 @@ static void PutBackToReadyQueue(PD* p){
          //printf("%d.after adding item to RR queue: %d\n",counter,ItemsInQ(&RoundRobinProcess));
          break;
       default:
-         //OS_Abort(2);
+         OS_Abort(2);
          break;
    }
 }
@@ -558,7 +558,9 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          cp->state = REPLYBLOCKED;
          receiver->state=READY;
          enqueue(receiver->reply_queue, (PD *)cp);
+         printf("Sender: %d  sending message %d\n",cp->pid,*v);
          Task_Next();
+         printf("Sender: %d  got reply message %d\n",cp->pid,cp->rps.r);
      }else{ /*receiver thread is not ready */
         //the client thread becomes sendblock
          //printf("sender block\n");
@@ -594,6 +596,7 @@ PID  Msg_Recv(MASK m, unsigned int *v ){
          //printf("no sender\n");
          cp->state = RECEIVEBLOCKED;
          Task_Next();
+         printf("Receiver: %d   received message: %d   from  sender %d\n",cp->pid,cp->rps.v,cp->rps.pid);
          return cp->rps.pid;
       }else{
          first_sender->state=REPLYBLOCKED;
@@ -720,18 +723,13 @@ void Blink2_IPC()
 
 void Send(){
   unsigned int a = 49;
-  Msg_Send(2,'a',&a);
-  //Task_Next();
-
+  Msg_Send(1,'a',&a);
 }
 
 void Receive(){
   unsigned int a = 1;
-    //Disable_Interrupt();
   PID sender = Msg_Recv('a',&a);
   Msg_Rply(sender, 94);
-  //Task_Next();
-    //Enable_Interrupt();
 }
 
 void Asend(){
@@ -744,7 +742,7 @@ void test1(){
    Task_Create_System( sys,1);
    Task_Create_System( sys,1);
    Task_Create_Period( Blink, 1, 4,1,0);
-   Task_Create_Period( Blink2, 1, 4,1,0);
+   Task_Create_Period( Blink2, 1, 4,1,1);
    Task_Create_RR(Blink, 1);
    Task_Create_RR(Blink, 1);
 }
@@ -755,22 +753,34 @@ void test2(){
    Task_Create_System(Receive, 1);
 }
 
-//TEST MAXProcess
+//TEST Send Receive Reply
 void test3(){
+   Task_Create_System(Receive, 1);
+   Task_Create_System(Send, 1);
+}
+
+//TEST MAXProcess
+void test4(){
     int i;
 	for (i = 0; i < 20; i++) {
 		Task_Create_RR(Blink, i);
 	}
 }
 
+// Timing conflict
+void test5(){
+  Task_Create_Period( Blink ,1, 4,1,0);
+  Task_Create_Period( Blink2,1, 4,1,0);
+}
+
 //Async send fail
-void test4(){
+void test6(){
   Task_Create_System(Asend,1);
   Task_Create_System(Receive,1);
 }
 
 //Async send success
-void test5(){
+void test7(){
   Task_Create_System(Receive,1);
   Task_Create_System(Asend,1);
 }
@@ -791,7 +801,7 @@ int main()
    cli();
    DDRB=0x83;
    OS_Init();
-   testIPC();
+   test5();
    setupTimer();
    sei();
    OS_Start();
