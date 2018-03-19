@@ -221,7 +221,7 @@ static PD *GetFirstNonBlockPeriodicProcess(){
     PD * readyTask = NULL;
     while(curr != NULL){
       counter++;
-      printf("%d.tick: %d offset: %d period: %d   answer: %d\n",counter,ticks,curr->offset,curr->period,(ticks - curr->offset)%curr->period);
+      printf("%d. pid: %d tick: %d offset: %d period: %d   (tick-offset) mod (period): %d\n",counter,curr->pid,ticks,curr->offset,curr->period,(ticks - curr->offset)%curr->period);
       if((ticks - curr->offset)%curr->period == 0){
         readyTask = curr;
         readyCount ++;
@@ -236,15 +236,16 @@ static PD *GetFirstNonBlockPeriodicProcess(){
     }
     return NULL;
 }
+
 static void Dispatch()
 {
      /* find the next READY task
        * Note: if there is no READY task, then this will loop forever!.
        */
     counter++;
-    printf("%d.SystemQueue Length: %d\n",counter,ItemsInQ(&SystemProcess));
-    printf("%d.PeriodicQueue Length: %d\n",counter,ItemsInQ(&PeriodicProcess));
-    printf("%d.RRQueue Length: %d\n",counter,ItemsInQ(&RoundRobinProcess));
+    //printf("%d.SystemQueue Length: %d\n",counter,ItemsInQ(&SystemProcess));
+    //printf("%d.PeriodicQueue Length: %d\n",counter,ItemsInQ(&PeriodicProcess));
+    //printf("%d.RRQueue Length: %d\n",counter,ItemsInQ(&RoundRobinProcess));
     while(1){
       //counter++;
       //printf("%d.Looking for new task ",counter);
@@ -271,7 +272,7 @@ static void Dispatch()
     //printf("%d.Changing stack pointer from : %p %p",counter,CurrentSp,CurrentSp+1);
     CurrentSp = cp ->sp;
 
-    printf("CP: %d   SP:%p\n",cp->pid,CurrentSp);
+    //printf("CP: %d   SP:%p\n",cp->pid,CurrentSp);
     cp->state = RUNNING;
 }
 
@@ -514,9 +515,9 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
      if(receiver==NULL){
          OS_Abort(7);
      }
-     counter++;
+     //counter++;
      //printf("%d.SENDER ID: %d  state: ",counter,cp->pid);
-     switch(cp->state){
+     /*switch(cp->state){
               case RUNNING:
                 printf("RUNNING\n");
                 break;
@@ -544,7 +545,7 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
               default:
                 printf("BLOCKED\n");
                 break;
-            }
+            }*/
 
      if(receiver->state==RECEIVEBLOCKED){
          //printf("receive block\n");
@@ -557,7 +558,6 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          cp->state = REPLYBLOCKED;
          receiver->state=READY;
          enqueue(receiver->reply_queue, (PD *)cp);
-         PutBackToReadyQueue(receiver);
          Task_Next();
      }else{ /*receiver thread is not ready */
         //the client thread becomes sendblock
@@ -570,8 +570,9 @@ void Msg_Send(PID id, MTYPE t, unsigned int *v){
          cp->rps.v = *v;
          cp->rps.t = t;
          cp->rps.status = 1;
+         printf("Sender: %d  sending message %d\n",cp->pid,*v);
          Task_Next();
-
+         printf("Sender: %d  got reply message %d\n",cp->pid,cp->rps.r);
          //we will be back here if receives reply
          //printf("IM BACK  reply    r: %d    status: %d\n",cp->rps.r,cp->rps.status);
      }
@@ -603,7 +604,7 @@ PID  Msg_Recv(MASK m, unsigned int *v ){
          cp->rps.pid = first_sender->pid;
          cp->rps.v = first_sender->rps.v;
          cp->rps.t = first_sender->rps.t;
-         //printf("RECIEVED MSG: sender: %d     v:   %d\n",first_sender->pid,first_sender->rps.v);
+         printf("Receiver: %d   received message: %d   from  sender %d\n",cp->pid,first_sender->rps.v,first_sender->pid);
          return first_sender->pid;
       }
      
@@ -635,16 +636,14 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
      }
      //if p is waiting on receive
      if(receiver->state==RECEIVEBLOCKED){
-         receiver->rps.pid = id;
+         receiver->rps.pid = Task_Pid();
          //message sent, receiver picks up message v
          receiver->rps.v = v;
          //message type
          receiver->rps.t = t;
-         //dont have to wait for reply
-     }else{
-         Task_Next();
+
+         receiver->state=READY;
      }
-     //else not op
 }
 
 /********************************************************************************
@@ -653,9 +652,9 @@ void Msg_ASend(PID id, MTYPE t, unsigned int v ){
 
 ISR(TIMER4_COMPA_vect){
   ticks++;
-  counter++;
+  //counter++;
   //printf("INSIDE INTERRUPT SP:%p%p\n",cp->sp,cp->sp +1);
-  printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
+  //printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
   //printf("number of: %d\n",ItemsInQ(&PeriodicProcess));
 
   if (KernelActive && cp->priority != 3) {
@@ -670,9 +669,9 @@ void sys(){
   Task_Terminate();
 }
 void sys2(){
-  Disable_Interrupt();
-  printf("IN SYS2: %d\n",cp->pid);
-  Enable_Interrupt();
+  //Disable_Interrupt();
+  //printf("IN SYS2: %d\n",cp->pid);
+  //Enable_Interrupt();
   Task_Terminate();
 }
 void Blink()
@@ -692,14 +691,15 @@ void Blink2()
 }
 
 void send_message(){
-    unsigned int a=0;
-    Msg_Send(2, 1, &a);
+    unsigned int a=100;
+    Msg_Send(2, 'a', &a);
 }
 
 void receive_message(){
     unsigned int a=0;
     PID id = Msg_Recv(0xff,&a);
-    printf("final return pid %d\n\n", id);
+    Msg_Rply(id,500);
+    //printf("final return pid %d\n\n", id);
 }
 
 
@@ -734,13 +734,17 @@ void Receive(){
     //Enable_Interrupt();
 }
 
+void Asend(){
+  Msg_ASend(1,'a',50);
+}
+
 //TEST System Process
 // test preemption and priority
 void test1(){
    Task_Create_System( sys,1);
    Task_Create_System( sys,1);
    Task_Create_Period( Blink, 1, 4,1,0);
-   Task_Create_Period( Blink2, 1, 4,1,1);
+   Task_Create_Period( Blink2, 1, 4,1,0);
    Task_Create_RR(Blink, 1);
    Task_Create_RR(Blink, 1);
 }
@@ -759,6 +763,18 @@ void test3(){
 	}
 }
 
+//Async send fail
+void test4(){
+  Task_Create_System(Asend,1);
+  Task_Create_System(Receive,1);
+}
+
+//Async send success
+void test5(){
+  Task_Create_System(Receive,1);
+  Task_Create_System(Asend,1);
+}
+
 //test sendIPC
 void testIPC(){
     
@@ -775,7 +791,7 @@ int main()
    cli();
    DDRB=0x83;
    OS_Init();
-   test1();
+   testIPC();
    setupTimer();
    sei();
    OS_Start();
