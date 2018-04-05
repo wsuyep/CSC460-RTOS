@@ -9,7 +9,8 @@
 #include <string.h>
 #include "lcd/lcd_drv.h"
 #include <util/delay.h>
-#include "avr_console.h"
+//#include "avr_console.h"
+//#include "base_station.h"
 
 #define Disable_Interrupt()		asm volatile ("cli"::)
 #define Enable_Interrupt()		asm volatile ("sei"::)
@@ -668,6 +669,7 @@ ISR(TIMER4_COMPA_vect){
     
 }
 
+
 void sys(){
   Task_Terminate();
 }
@@ -679,7 +681,6 @@ void sys2(){
 }
 void Blink()
 {
-  unsigned int a = 1;
   while(1){
 
   }
@@ -687,8 +688,6 @@ void Blink()
 void Blink2()
 {
   while(1){
-
-    //printf("task2");
     _delay_ms(2000);
   }
 }
@@ -793,17 +792,20 @@ void testIPC(){
     
 }
 
-int main() 
-{
-   uart_init();
-   stdout = &uart_output;
-   stdin = &uart_input;
-   cli();
-   DDRB=0x83;
-   OS_Init();
-   test5();
-   setupTimer();
-   sei();
-   OS_Start();
-   return -1;
-}
+//int main() 
+//{
+//   uart_init();
+//   stdout = &uart_output;
+//   stdin = &uart_input;
+//   
+//   cli();
+//   //DDRB=0x83;
+//   OS_Init();
+//   //test5();
+//   //setupTimer();
+//   config();
+//   Task_Create_System(checkJoystick,1);
+//   sei();
+//   OS_Start();
+//   return -1;
+//}
