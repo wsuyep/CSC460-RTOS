@@ -6,7 +6,8 @@
 #include "base_station.h"
 #include "os.h"
 #include "avr_console.h"
-//#include "./roomba/roomba.h"
+#include "./roomba/roomba.h"
+#include "./uart/uart.h"
 
 int servoState = 375;
 uint8_t SERVO = 1;
@@ -54,7 +55,6 @@ void RommbaControl(){
         Bluetooth_Send_Byte(x);
         Bluetooth_Send_Byte(y);
         
-        
     }
 }
 
@@ -67,13 +67,15 @@ void test(){
 
 int main() 
 {
-   
-   //init_uart_bt();
+    
+   uart_init();
    stdout = &uart_output;
    stdin = &uart_input;
    cli();
+   //DDRB=0x83;
    OS_Init();
    config();
+   init_uart_bt();
    Task_Create_System(RommbaControl,1);
    sei();
    OS_Start();

@@ -16,7 +16,7 @@
 #define F_CPU 11059200UL
 #endif
 
-#define BAUD 19200
+#define BAUD 115200
 #define UBRR_VALUE (((F_CPU / (BAUD * 16UL))) - 1)
 
 	// This needs to be defined, but is never used directly.
@@ -52,7 +52,6 @@ void init_uart_roomba(UART_BPS baud){
     UCSR2A &= ~(1 << U2X2);
     */
     
-    // Set baud rate to 19.2k
     UBRR0H = 0;
     
     // Enable receiver, transmitter

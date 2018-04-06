@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include "./uart/uart.h"
 #include "./roomba/roomba.h"
+#include "avr_console.h"
+
 
 void Servo_Init() {
 	// Setup ports and timers
@@ -21,6 +23,15 @@ void Servo_Init() {
 }
 
 void receive_byte(){
+     uint8_t roomba_x;
+     uint8_t roomba_y;
+     for(;;){
+         roomba_x = Bluetooth_Receive_Byte();
+         printf("rommba data x %d\n", roomba_x);
+         _delay_ms(1000);
+         roomba_y = Bluetooth_Receive_Byte();
+         printf("rommba data y %d\n", roomba_y);
+     }
      
 }
 
@@ -29,6 +40,17 @@ void receive_byte(){
 int main(){
     Roomba_Init();
     init_uart_bt();
-    Servo_Init();
+    //Servo_Init();
+    
+    uart_init();
+    stdout = &uart_output;
+    stdin = &uart_input;
+    cli();
+    //DDRB=0x83;
+    OS_Init();
+    Task_Create_System(receive_byte,1);
+    sei();
+    OS_Start();
     return -1;
+
 }
