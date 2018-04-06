@@ -52,8 +52,8 @@ void RommbaControl(){
         printf("y value %d\n", y);
         
         
-        Bluetooth_Send_Byte(x);
-        Bluetooth_Send_Byte(y);
+        Bluetooth_Send_Byte(1);
+        //Bluetooth_Send_Byte(1);
         
     }
 }
@@ -67,7 +67,7 @@ void test(){
 
 int main() 
 {
-    
+   init_uart_bt();
    uart_init();
    stdout = &uart_output;
    stdin = &uart_input;
@@ -75,7 +75,6 @@ int main()
    //DDRB=0x83;
    OS_Init();
    config();
-   init_uart_bt();
    Task_Create_System(RommbaControl,1);
    sei();
    OS_Start();

@@ -23,27 +23,34 @@ void Servo_Init() {
 }
 
 void receive_byte(){
-     int roomba_x;
-     int roomba_y;
+     uint8_t roomba_x;
+     uint8_t roomba_y;
      for(;;){
-         //roomba_x = Bluetooth_Receive_Byte();
-         printf("rommba data x\n");
-         //_delay_ms(1000);
-         //roomba_y = Bluetooth_Receive_Byte();
-         //printf("rommba data y %d\n", roomba_y);
+         roomba_x = Bluetooth_Receive_Byte();
+         printf("rommba data x %d\n", roomba_x);
+         _delay_ms(1000);
+         roomba_y = Bluetooth_Receive_Byte();
+         printf("rommba data y %d\n", roomba_y);
      }
      
 }
 
 
 
-
 int main(){
-    DDRB=0xff;
+    Roomba_Init();
+    init_uart_bt();
+    //Servo_Init();
+    
     uart_init();
     stdout = &uart_output;
     stdin = &uart_input;
-    receive_byte();
-    return 0;
+    cli();
+    //DDRB=0x83;
+    OS_Init();
+    Task_Create_System(receive_byte,1);
+    sei();
+    OS_Start();
+    return -1;
 
 }
