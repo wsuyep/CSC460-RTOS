@@ -35,7 +35,6 @@ void Roomba_Init()
     
 	init_uart_roomba(UART_19200);
 
-
 	// start the Roomba's SCI
 	uart_send_byte(START);
 	_delay_ms(200);
@@ -46,17 +45,27 @@ void Roomba_Init()
     
     //uart_send_byte(DOCK);
     //_delay_ms(200);
+    
     uart_send_byte(145);
     uart_send_byte(255);
     uart_send_byte(56);
     uart_send_byte(1);
     uart_send_byte(244);
     
-    uart_send_byte(STOP);
-    
-
+    //uart_send_byte(STOP); 
     
 }
+
+void Roomba_Drive( int16_t velocity, int16_t radius )
+{
+	uart_send_byte(DRIVE);
+	uart_send_byte(velocity>>8);
+	uart_send_byte(velocity);
+	uart_send_byte(radius>>8);
+	uart_send_byte(radius);
+}
+
+
 
 /**
  * Use this function instead of the while loops in Roomba_UpdateSensorPacket if you have a system

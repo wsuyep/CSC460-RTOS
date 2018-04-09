@@ -40,8 +40,6 @@ void receive_byte(){
 int main(){
     Roomba_Init();
     init_uart_bt();
-    //Servo_Init();
-    
     uart_init();
     stdout = &uart_output;
     stdin = &uart_input;

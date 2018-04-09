@@ -9,14 +9,10 @@
 #include "uart.h"
 
 
-#define F_CPU 16000000
+#define F_CPU 16000000UL
 
-#ifndef F_CPU
-#warning "F_CPU not defined for uart.c."
-#define F_CPU 11059200UL
-#endif
 
-#define BAUD 115200
+#define BAUD 19200
 #define UBRR_VALUE (((F_CPU / (BAUD * 16UL))) - 1)
 
 	// This needs to be defined, but is never used directly.
@@ -28,30 +24,6 @@ static volatile uint8_t uart_buffer_index;
 
 void init_uart_roomba(UART_BPS baud){
     
-    /*
-    UBRR0H = 0;	// for any speed >= 9600 bps, the UBBR value fits in the low byte.
-	UCSR0A = _BV(U2X1);
-	UCSR0B = _BV(RXEN0) | _BV(TXEN0) | _BV(RXCIE0);
-	UCSR0C = _BV(UCSZ01) | _BV(UCSZ00);
-    */
-    
-    /*
-    UBRR2H = 0b0000;		// This is for 19200 Baud.
-	UBRR2L = 0b00110011;	// This is for 19200 Baud.
-	
-	// Clear USART Transmit complete flag, normal USART transmission speed
-	UCSR2A = (1 << TXC2) | (0 << U2X2);
-
-	// Enable receiver, transmitter, rx complete interrupt and tx complete interrupt.
-	UCSR2B = (1 << RXEN2) | (1 << TXEN2) | (1 << RXCIE1);
-
-	// 8-bit data
-	UCSR2C = ((1 << UCSZ21) | (1 << UCSZ20));
-
-	// Disable 2x speed
-    UCSR2A &= ~(1 << U2X2);
-    */
-    
     UBRR0H = 0;
     
     // Enable receiver, transmitter
@@ -62,6 +34,53 @@ void init_uart_roomba(UART_BPS baud){
 
     // disable 2x speed
     UCSR0A = _BV(U2X1);
+    
+    	switch (baud)
+	{
+    #if F_CPU==8000000UL
+        case UART_19200:
+            UBRR0L = 51;
+            break;
+        case UART_38400:
+            UBRR0L = 25;
+            break;
+        case UART_57600:
+            UBRR0L = 16;
+            break;
+        default:
+            UBRR0L = 51;
+    #elif F_CPU==16000000UL
+        case UART_19200:
+            UBRR0L = 103;
+            break;
+        case UART_38400:
+            UBRR0L = 51;
+            break;
+        case UART_57600:
+            UBRR0L = 34;
+            break;
+        default:
+            UBRR0L = 103;
+    #elif F_CPU==18432000UL
+        case UART_19200:
+            UBRR0L = 119;
+            break;
+        case UART_38400:
+            UBRR0L = 59;
+            break;
+        case UART_57600:
+            UBRR0L = 39;
+            break;
+        default:
+            UBRR0L = 119;
+            break;
+    #else
+    #warning "F_CPU undefined or not supported in uart.c."
+        default:
+            UBRR0L = 71;
+            break;
+    #endif
+        }
 }
 
 

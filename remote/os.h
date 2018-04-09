@@ -24,6 +24,10 @@ typedef unsigned char MASK;
 // will be stopped.
 void OS_Abort(unsigned int error);
 
+void OS_Start();
+
+void OS_Init();
+
 /*
  * Scheduling Policy:
  * There are three priority levels:
