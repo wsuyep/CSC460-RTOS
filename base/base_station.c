@@ -49,12 +49,8 @@ void RommbaControl(){
     for(;;){
         rx = readADC(X);
         ry = readADC(Y);
-        //printf("x value %d\n", rx);
-        //_delay_ms(1000);
-        //printf("y value %d\n", ry);
-        //503, 522
         
-        
+        //stop
         if(rx>503-20 && rx<503+20 && ry>521-20 && ry<521+20){
             uart_send_byte(145);
             uart_send_byte(0);
