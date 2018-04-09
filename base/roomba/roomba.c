@@ -54,32 +54,29 @@ void Roomba_Init()
 	_delay_ms(200);
 
 	// put the Roomba into safe mode.
-	uart_send_byte(FULL);
-	_delay_ms(200);
+	uart_send_byte(SAFE);
+	_delay_ms(1000);
     
-    uart_send_byte(DOCK);
-    _delay_ms(200);
-
-	// See the appropriate AVR hardware specification, at the end of the USART section, for a table of baud rate
-	// framing error probabilities.  The best we can do with a 16 or 8 MHz crystal is 38400 bps, which has a framing
-	// error rate of 0.2% (1 bit out of every 500).  Well, the best is 76800 bps, but the Roomba doesn't support
-	// that.  38400 at 0.2% is sufficient for our purposes.  An 18.432 MHz crystal will generate all the Roomba's
-	// baud rates with 0.0% error!.  Anyway, the point is we want to use a 38400 bps baud rate to avoid framing
-	// errors.  Also, we have to wait for 100 ms after changing the baud rate.
     /*
-	uart_send_byte(BAUD);
-	uart_send_byte(ROOMBA_38400BPS);
-	_delay_ms(100);
-
-	// change the AVR's UART clock to the new baud rate.
-	uart_init(UART_38400);
-
-	// put the Roomba into safe mode.
-	uart_putchar(CONTROL);
-	_delay_ms(20);
+    uart_send_byte(145);
+    uart_send_byte(255);
+    uart_send_byte(56);
+    uart_send_byte(1);
+    uart_send_byte(244);
+    
+    Roomba_Drive(0, 0);
     */
-	// Set the Roomba's LEDs to the defaults defined above (to verify defaults).
-	//update_leds();
+
+}
+
+
+void Roomba_Drive( int16_t velocity, int16_t radius )
+{
+	uart_send_byte(DRIVE);
+	uart_send_byte(velocity>>8);
+	uart_send_byte(velocity);
+	uart_send_byte(radius>>8);
+	uart_send_byte(radius);
 }
 
 /**

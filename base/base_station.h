@@ -1,12 +1,12 @@
 #include <stdint.h>
 
-uint8_t X    = 10; 
-uint8_t Y    = 11; 
+uint8_t X    = 11; 
+uint8_t Y    = 10; 
 
 
 // Joystick Axis
-int x      = 0;
-int y      = 0;
+int rx      = 0;
+int ry      = 0;
 
 void config();
 uint16_t readADC(uint8_t channel);

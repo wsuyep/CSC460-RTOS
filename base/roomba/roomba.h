@@ -19,6 +19,16 @@ typedef enum _rstate
 	FULL_MODE,
 } ROOMBA_STATE;
 
+
+// Data special cases
+#define ROOMBA_SPEED	50
+#define ROOMBA_TURN		150
+#define TURN_RADIUS		400
+#define AUTOTURN_RADIUS	350
+#define DRIVE_STRAIGHT  32768
+#define IN_PLACE_CW     -1
+#define IN_PLACE_CCW     1
+
 /**
  * Turn on the Roomba with the serial port DD pin, configure the SCI to operate at 38400 baud, put the Roomba into safe mode,
  * and configure the LEDs to their default values.

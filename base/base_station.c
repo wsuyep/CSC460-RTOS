@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include "base_station.h"
 #include "os.h"
-#include "avr_console.h"
+//#include "avr_console.h"
 #include "./roomba/roomba.h"
 #include "./uart/uart.h"
 
@@ -44,39 +44,65 @@ uint16_t readADC(uint8_t channel) {
 }
 
 void RommbaControl(){
+    
+    
     for(;;){
-        x = readADC(X);
-        y = readADC(Y);
-        printf("x value %d\n", x);
-        _delay_ms(1000);
-        printf("y value %d\n", y);
+        rx = readADC(X);
+        ry = readADC(Y);
+        //printf("x value %d\n", rx);
+        //_delay_ms(1000);
+        //printf("y value %d\n", ry);
+        //503, 522
         
         
-        Bluetooth_Send_Byte(1);
-        //Bluetooth_Send_Byte(1);
-        
+        if(rx>503-20 && rx<503+20 && ry>521-20 && ry<521+20){
+            uart_send_byte(145);
+            uart_send_byte(0);
+            uart_send_byte(0);
+            uart_send_byte(0);
+            uart_send_byte(0);
+        }else{
+             if(rx<300){
+               //left
+               Roomba_Drive(50, 1);
+             }else if(rx>700){
+               //right 
+                Roomba_Drive(50, -1);
+             }
+             if(ry>800){
+               //forward
+               Roomba_Drive(100, 32768);
+             }else if(ry<300){
+               //backward  
+               Roomba_Drive(-100, 32768);
+             }
+         }
+         
     }
 }
 
-void test(){
-     for(;;){
-        printf("test printf");   
-     }
-}
 
 
 int main() 
 {
-   init_uart_bt();
-   uart_init();
-   stdout = &uart_output;
-   stdin = &uart_input;
-   cli();
-   //DDRB=0x83;
-   OS_Init();
+   Roomba_Init();
+   //init_uart_bt();
+//   uart_init();
+//   stdout = &uart_output;
+//   stdin = &uart_input;
+  // cli();
+   //OS_Init();
+    /*
+    uart_send_byte(145);
+    uart_send_byte(1);
+    uart_send_byte(44);
+    uart_send_byte(254);
+    uart_send_byte(-44);
+    */
    config();
-   Task_Create_System(RommbaControl,1);
-   sei();
-   OS_Start();
-   return -1;
+   RommbaControl();
+    
+//   sei();
+  // OS_Start();
+   return 0;
 }
