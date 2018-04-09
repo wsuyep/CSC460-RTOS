@@ -17,4 +17,4 @@ avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega2560 -c uart/uart.c -o uart.o
 avr-gcc -c -O2 -mmcu=atmega2560 -Wa,--gstabs -o cswitch.o cswitch.s
 avr-gcc -mmcu=atmega2560 uart.o roomba.o os.o remote.o cswitch.o -o remote.elf
 avr-objcopy -O ihex -R .eeprom remote.elf remote.hex
-avrdude -v -p atmega2560 -c wiring -P /dev/cu.usbmodem1431 -b 115200 -D -U flash:w:remote.hex:i
+avrdude -v -p atmega2560 -c wiring -P /dev/cu.usbmodem1421 -b 115200 -D -U flash:w:remote.hex:i

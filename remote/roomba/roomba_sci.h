@@ -11,7 +11,7 @@
 /*****											Commands										*****/
 
 #define START	128		// start the Roomba's serial command interface
-#define BAUD	129		// set the SCI's baudrate (default on full power cycle is 57600
+//#define BAUD	129		// set the SCI's baudrate (default on full power cycle is 57600
 #define CONTROL	130		// enable control via SCI
 #define SAFE	131		// enter safe mode
 #define FULL	132		// enter full mode

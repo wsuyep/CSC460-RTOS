@@ -16,7 +16,7 @@
 #define F_CPU 11059200UL
 #endif
 
-#define BAUD 115200
+#define BAUD 19200
 #define UBRR_VALUE (((F_CPU / (BAUD * 16UL))) - 1)
 
 	// This needs to be defined, but is never used directly.

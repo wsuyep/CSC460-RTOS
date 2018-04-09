@@ -46,15 +46,6 @@ void Roomba_Init()
     
     //uart_send_byte(DOCK);
     //_delay_ms(200);
-    uart_send_byte(145);
-    uart_send_byte(255);
-    uart_send_byte(56);
-    uart_send_byte(1);
-    uart_send_byte(244);
-    
-    uart_send_byte(STOP);
-    
-
     
 }
 
