@@ -38,17 +38,20 @@ void receive_byte(){
 
 
 int main(){
-    Roomba_Init();
-    init_uart_bt();
+    //Roomba_Init();
+    //init_uart_bt();
+    //Servo_Init();
+
     uart_init();
     stdout = &uart_output;
     stdin = &uart_input;
-    cli();
+    
+    printf("hi\n");
     //DDRB=0x83;
-    OS_Init();
-    Task_Create_System(receive_byte,1);
-    sei();
-    OS_Start();
+    //OS_Init();
+    //Task_Create_System(receive_byte,1);
+    //sei();
+    //OS_Start();
     return -1;
 
 }
