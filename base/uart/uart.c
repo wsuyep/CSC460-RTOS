@@ -156,13 +156,17 @@ void uart_print(uint8_t* output, int size)
 
 void init_uart_bt(){
     // Enable receiver, transmitter
-    UCSR1B = (1<<RXEN1) | (1<<TXEN1);
+    UCSR1B = (1<<RXEN1) | (1<<TXEN1) | _BV(RXCIE1);
 
     // 8-bit data
     UCSR1C = ((1<<UCSZ11)|(1<<UCSZ10));
 
     // disable 2x speed
     UCSR1A &= ~(1<<U2X1);
+    
+    UBRR1H = 0;
+    
+    UBRR1L = 103;
 }
 
 void Bluetooth_Send_Byte(uint8_t data_out){

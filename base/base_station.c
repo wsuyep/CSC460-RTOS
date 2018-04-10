@@ -49,31 +49,31 @@ void RommbaControl(){
     for(;;){
         rx = readADC(X);
         ry = readADC(Y);
-        
+        //uint8_t x = 3;
+        //Bluetooth_Send_Byte('l');
         //stop
-        if(rx>503-20 && rx<503+20 && ry>521-20 && ry<521+20){
-            uart_send_byte(145);
-            uart_send_byte(0);
-            uart_send_byte(0);
-            uart_send_byte(0);
-            uart_send_byte(0);
+        if (rx>503-20 && rx<503+20 && ry>521-20 && ry<521+20){
+            Bluetooth_Send_Byte('s');
         }else{
              if(rx<300){
                //left
-               Roomba_Drive(50, 1);
+                Bluetooth_Send_Byte('l');
              }else if(rx>700){
                //right 
-                Roomba_Drive(50, -1);
+                //Roomba_Drive(50, -1);
+                Bluetooth_Send_Byte('r');
              }
              if(ry>800){
                //forward
-               Roomba_Drive(100, 32768);
+               Bluetooth_Send_Byte('b');
+               //Roomba_Drive(100, 32768);
              }else if(ry<300){
                //backward  
-               Roomba_Drive(-100, 32768);
+               Bluetooth_Send_Byte('f');
+               //Roomba_Drive(-100, 32768);
              }
          }
-         
+        
     }
 }
 
@@ -81,20 +81,14 @@ void RommbaControl(){
 
 int main() 
 {
-   Roomba_Init();
-   //init_uart_bt();
+   //Roomba_Init();
+   init_uart_bt();
 //   uart_init();
 //   stdout = &uart_output;
 //   stdin = &uart_input;
   // cli();
    //OS_Init();
-    /*
-    uart_send_byte(145);
-    uart_send_byte(1);
-    uart_send_byte(44);
-    uart_send_byte(254);
-    uart_send_byte(-44);
-    */
+
    config();
    RommbaControl();
     
