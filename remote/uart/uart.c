@@ -9,12 +9,7 @@
 #include "uart.h"
 
 
-#define F_CPU 16000000
-
-#ifndef F_CPU
-#warning "F_CPU not defined for uart.c."
-#define F_CPU 11059200UL
-#endif
+#define F_CPU 16000000UL
 
 #define BAUD 19200
 #define UBRR_VALUE (((F_CPU / (BAUD * 16UL))) - 1)
@@ -62,6 +57,8 @@ void init_uart_roomba(UART_BPS baud){
 
     // disable 2x speed
     UCSR0A = _BV(U2X1);
+
+    UBRR0L = 103;
 }
 
 
@@ -118,10 +115,10 @@ void uart_reset_receive(void)
 /**
  * UART receive byte ISR
  */
-ISR(USART0_RX_vect)
+ISR(USART1_RX_vect)
 {
-	while(!(UCSR0A & (1<<RXC0)));
-    uart_buffer[uart_buffer_index] = UDR0;
+	while(!(UCSR1A & (1<<RXC1)));
+    uart_buffer[uart_buffer_index] = UDR1;
     uart_buffer_index = (uart_buffer_index + 1) % UART_BUFFER_SIZE;
 }
 
@@ -136,13 +133,16 @@ void uart_print(uint8_t* output, int size)
 
 void init_uart_bt(){
     // Enable receiver, transmitter
-    UCSR1B = (1<<RXEN1) | (1<<TXEN1);
+    UCSR1B = (1<<RXEN1) | (1<<TXEN1)| _BV(RXCIE1);
 
     // 8-bit data
     UCSR1C = ((1<<UCSZ11)|(1<<UCSZ10));
 
     // disable 2x speed
     UCSR1A &= ~(1<<U2X1);
+
+    UBRR1H = 0;
+    UBRR1L = 103;
 }
 
 void Bluetooth_Send_Byte(uint8_t data_out){
