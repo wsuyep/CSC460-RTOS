@@ -97,6 +97,41 @@ void Servo_Drive_Y(int dir){
     }
 }
 
+void readRoombaSensor(){
+    roomba_sensor_data_t packet;
+    Roomba_UpdateSensorPacket(EXTERNAL, &packet);
+    _delay_ms(30);
+    printf("bumper sensor %d\n", packet.bumps_wheeldrops);
+    if(packet.bumps_wheeldrops == 1){
+             //backward
+             Roomba_Drive(-100,32768);
+             _delay_ms(500);
+    }
+    
+}
+
+void auto_drive(){
+    readRoombaSensor();
+    Roomba_Drive(50,1);
+    Roomba_Drive(100, 50);
+    
+}
+
+void checkTimer(){
+    curr_ticks = getTicks();
+    if(curr_state == 1 && (cumulative_ticks+(curr_ticks-last_tick)) > tick_thresh){
+        PORTA = 0b00000000;
+        curr_state = 0;
+        cumulative_ticks += (curr_ticks-last_tick);
+        last_tick = curr_ticks;
+    }
+
+    if((curr_ticks % switch_period) < 50 && (last_switch < curr_ticks - 1000)){
+        last_switch = curr_ticks;
+        switchMode();
+    }
+}
+
 void receive_byte(){
      unsigned char roomba_x;
      unsigned char roomba_y;
@@ -124,7 +159,8 @@ void receive_byte(){
                     break;
                 case('s'):
                     //stop
-                    Roomba_Drive(0,0);
+                    //Roomba_Drive(0,0);
+                    auto_drive();
                     break;
 
                 //servo cases
@@ -174,45 +210,29 @@ void receive_byte(){
 }
 
 
+
+
 void dummy(){
     for(;;){
 
     }
 }
 
-void checkTimer(){
-    curr_ticks = getTicks();
-    if(curr_state == 1 && (cumulative_ticks+(curr_ticks-last_tick)) > tick_thresh){
-        PORTA = 0b00000000;
-        curr_state = 0;
-        cumulative_ticks += (curr_ticks-last_tick);
-        last_tick = curr_ticks;
-    }
-
-    if((curr_ticks % switch_period) < 50 && (last_switch < curr_ticks - 1000)){
-        last_switch = curr_ticks;
-        switchMode();
-    }
-}
 
 
 int main(){
-    uart_init();
-    stdout = &uart_output;
-    stdin = &uart_input;
+    //uart_init();
+    //stdout = &uart_output;
+    //stdin = &uart_input;
     //cli();
     config();
-    for(;;){
-        printf("sensor value: %d\n",readADC(8));
-    }
-    
 
-    // setupTimer();
-    // DDRA = 0xff;
-    // Roomba_Init();
+    setupTimer();
+    DDRA = 0xff;
+    Roomba_Init();
     // init_uart_bt();
-    // Servo_Init();
-    // receive_byte();
+    Servo_Init();
+    receive_byte();
     // cli();
     // OS_Init();
     // setupTimer();

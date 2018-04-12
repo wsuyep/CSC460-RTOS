@@ -82,8 +82,8 @@ uint8_t wait_for_bytes(uint8_t num_bytes, uint8_t timeout)
 void Roomba_UpdateSensorPacket(ROOMBA_SENSOR_GROUP group, roomba_sensor_data_t* sensor_packet)
 {
 	// No, I don't feel bad about manual loop unrolling.
-	uart_putchar(SENSORS);
-	uart_putchar(group);
+	uart_send_byte(SENSORS);
+	uart_send_byte(group);
 	switch(group)
 	{
 	case EXTERNAL:
