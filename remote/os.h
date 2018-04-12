@@ -28,6 +28,8 @@ void OS_Start();
 
 void OS_Init();
 
+void setupTimer();
+
 /*
  * Scheduling Policy:
  * There are three priority levels:

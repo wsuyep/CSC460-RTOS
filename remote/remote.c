@@ -18,7 +18,6 @@ void Servo_Init() {
     TCCR4A = (1<<COM4A1) | (1<<COM4B1) | (1<<WGM41);  //NON Inverted PWM
     TCCR4B |= (1<<WGM43) | (1<<WGM42) | (1<<CS41) | (1<<CS40); //PRESCALER=64 MODE 14 (FAST PWM)
     ICR4 = 4999;
-
     OCR4A = 375; // 90 Degrees
 }
 
