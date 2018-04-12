@@ -20,6 +20,7 @@ typedef unsigned int BOOL;       // TRUE or FALSE
 typedef unsigned char MTYPE;
 typedef unsigned char MASK; 
 
+
 // Aborts the RTOS and enters a "non-executing" state with an error code. That is, all tasks
 // will be stopped.
 void OS_Abort(unsigned int error);
@@ -29,6 +30,8 @@ void OS_Start();
 void OS_Init();
 
 void setupTimer();
+
+TICK getTicks();
 
 /*
  * Scheduling Policy:

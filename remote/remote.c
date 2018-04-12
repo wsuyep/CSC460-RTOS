@@ -9,6 +9,11 @@
 #include <time.h>
 #include "os.h"
 
+int curr_state = 0;
+TICK last_tick=0;
+TICK curr_ticks=0;
+TICK cumulative_ticks=0;
+TICK tick_thresh = 30000;
 
 void Servo_Init() {
     // Set PORTL Pin 5 (Digital Pin 44) as output
@@ -51,10 +56,9 @@ void Servo_Drive_Y(int dir){
 void receive_byte(){
      unsigned char roomba_x;
      unsigned char roomba_y;
-     printf("start\n");
      for(;;){
+        //checkTimer();
         unsigned char x = Bluetooth_Receive_Byte();
-        printf("received: %c\n",x);
         switch(x){
             case('l'):
                 //left
@@ -62,11 +66,12 @@ void receive_byte(){
                 break;
             case('f'):
                 //forward
-                Roomba_Drive(-100,32768);
+                //printf("received: %c",x);
+                Roomba_Drive(100,32768);
                 break;
             case('b'):
                 //backward
-                Roomba_Drive(100,32768);
+                Roomba_Drive(-100,32768);
                 break;
             case('r'):
                 //right
@@ -94,6 +99,21 @@ void receive_byte(){
             case('h'):
                 Servo_Drive_Y(0);
                 break;
+
+            // laser
+            case('1'):
+                curr_ticks = getTicks();
+                if(curr_state == 0 && curr_ticks>(last_tick+20) && cumulative_ticks<tick_thresh){
+                    PORTA = 0b00000001;
+                    curr_state = 1;
+                    last_tick = curr_ticks;
+                }else if(curr_state == 1 && curr_ticks>(last_tick+20)){
+                    PORTA = 0b00000000;
+                    curr_state = 0;
+                    cumulative_ticks += (curr_ticks-last_tick);
+                    last_tick = curr_ticks;
+                }
+                break;
         }
 
      //     roomba_x = Bluetooth_Receive_Byte();
@@ -104,20 +124,33 @@ void receive_byte(){
      
 }
 
+
 void dummy(){
     for(;;){
 
     }
 }
 
+void checkTimer(){
+    curr_ticks = getTicks();
+    if(curr_state == 1 && (cumulative_ticks+(curr_ticks-last_tick)) > tick_thresh){
+        PORTA = 0b00000000;
+        curr_state = 0;
+        cumulative_ticks += (curr_ticks-last_tick);
+        last_tick = curr_ticks;
+    }
+}
 
 int main(){
+    // uart_init();
+    // stdout = &uart_output;
+    // stdin = &uart_input;
+    //cli();
+    setupTimer();
+    DDRA = 0xff;
     Roomba_Init();
     init_uart_bt();
     Servo_Init();
-    uart_init();
-    stdout = &uart_output;
-    stdin = &uart_input;
     receive_byte();
     // cli();
     // OS_Init();
