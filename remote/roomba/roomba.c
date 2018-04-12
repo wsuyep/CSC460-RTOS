@@ -78,7 +78,7 @@ uint8_t wait_for_bytes(uint8_t num_bytes, uint8_t timeout)
 	else
 		return 0;
 }*/
-/*
+
 void Roomba_UpdateSensorPacket(ROOMBA_SENSOR_GROUP group, roomba_sensor_data_t* sensor_packet)
 {
 	// No, I don't feel bad about manual loop unrolling.
@@ -155,7 +155,7 @@ void Roomba_ChangeState(ROOMBA_STATE newState)
 
 	state = newState;
 	_delay_ms(20);
-}*/
+}
 
 /**
  * Update the LEDs on the Roomba to match the configured state

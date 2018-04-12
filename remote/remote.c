@@ -13,7 +13,51 @@ int curr_state = 0;
 TICK last_tick=0;
 TICK curr_ticks=0;
 TICK cumulative_ticks=0;
-TICK tick_thresh = 30000;
+TICK tick_thresh = 3000;
+
+TICK sixty_sec_timer = 0;
+TICK last_switch = 0;
+TICK switch_period = 1000;
+int mode = 0; // 0 = full control, 1 = autonomous
+
+void autonomous_spin(){
+    Roomba_Drive(200,1);
+}
+
+void initADC(){
+    //set scalar 
+    ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
+    //set 5V
+    ADMUX |= (1 << REFS0);
+    //ADMUX |= (1 << ADLAR);
+    ADCSRA |= (1 << ADEN);
+    //ADCSRA |= (1 << ADSC);
+}
+
+void config(){
+    //set pin mode input for Analog A10 
+    DDRK &= ~(1 << DDK0);
+    initADC();
+}
+
+uint16_t readADC(uint8_t channel) {
+    ADMUX = (ADMUX & 0xE0 ) | (0x07 & channel);
+    ADCSRB = (ADCSRB & 0xF7) | (channel & (1 << MUX5));
+    ADCSRA |= (1 << ADSC);
+    while ((ADCSRA & (1 << ADSC)));
+    //scale to 
+    ADC = (0.458*ADC) + 140;
+    return ADC;
+}
+
+void switchMode(){
+    if(mode == 0){
+        mode = 1;
+
+    }else{
+        mode = 0;
+    }
+}
 
 void Servo_Init() {
     // Set PORTL Pin 5 (Digital Pin 44) as output
@@ -57,64 +101,69 @@ void receive_byte(){
      unsigned char roomba_x;
      unsigned char roomba_y;
      for(;;){
-        //checkTimer();
+        checkTimer();
         unsigned char x = Bluetooth_Receive_Byte();
-        switch(x){
-            case('l'):
-                //left
-                Roomba_Drive(50,1);
-                break;
-            case('f'):
-                //forward
-                //printf("received: %c",x);
-                Roomba_Drive(100,32768);
-                break;
-            case('b'):
-                //backward
-                Roomba_Drive(-100,32768);
-                break;
-            case('r'):
-                //right
-                Roomba_Drive(50,-1);
-                break;
-            case('s'):
-                //stop
-                Roomba_Drive(0,0);
-                break;
+        if(mode == 0){
+            switch(x){
+                case('l'):
+                    //left
+                    Roomba_Drive(50,1);
+                    break;
+                case('f'):
+                    //forward
+                    //printf("received: %c",x);
+                    Roomba_Drive(100,32768);
+                    break;
+                case('b'):
+                    //backward
+                    Roomba_Drive(-100,32768);
+                    break;
+                case('r'):
+                    //right
+                    Roomba_Drive(50,-1);
+                    break;
+                case('s'):
+                    //stop
+                    Roomba_Drive(0,0);
+                    break;
 
-            //servo cases
-            // left
-            case('z'):
-                Servo_Drive_X(1);
-                break;
-            // right
-            case('y'):
-                Servo_Drive_X(0);
-                break;
-            // up
-            case('q'):
-                Servo_Drive_Y(1);
-                break;
-            // down
-            case('h'):
-                Servo_Drive_Y(0);
-                break;
+                //servo cases
+                // left
+                case('z'):
+                    Servo_Drive_X(1);
+                    break;
+                // right
+                case('y'):
+                    Servo_Drive_X(0);
+                    break;
+                // up
+                case('q'):
+                    Servo_Drive_Y(1);
+                    break;
+                // down
+                case('h'):
+                    Servo_Drive_Y(0);
+                    break;
 
-            // laser
-            case('1'):
-                curr_ticks = getTicks();
-                if(curr_state == 0 && curr_ticks>(last_tick+20) && cumulative_ticks<tick_thresh){
-                    PORTA = 0b00000001;
-                    curr_state = 1;
-                    last_tick = curr_ticks;
-                }else if(curr_state == 1 && curr_ticks>(last_tick+20)){
-                    PORTA = 0b00000000;
-                    curr_state = 0;
-                    cumulative_ticks += (curr_ticks-last_tick);
-                    last_tick = curr_ticks;
-                }
-                break;
+                // laser
+                case('1'):
+                    curr_ticks = getTicks();
+                    if(curr_state == 0 && curr_ticks>(last_tick+20) && cumulative_ticks<tick_thresh){
+                        PORTA = 0b00000001;
+                        curr_state = 1;
+                        last_tick = curr_ticks;
+                    }else if(curr_state == 1 && curr_ticks>(last_tick+20)){
+                        PORTA = 0b00000000;
+                        curr_state = 0;
+                        cumulative_ticks += (curr_ticks-last_tick);
+                        last_tick = curr_ticks;
+                    }
+                    break;
+            }
+        }else{
+            autonomous_spin();
         }
+        
 
      //     roomba_x = Bluetooth_Receive_Byte();
      //     printf("rommba data x %d\n", roomba_x);
@@ -139,19 +188,31 @@ void checkTimer(){
         cumulative_ticks += (curr_ticks-last_tick);
         last_tick = curr_ticks;
     }
+
+    if((curr_ticks % switch_period) < 50 && (last_switch < curr_ticks - 1000)){
+        last_switch = curr_ticks;
+        switchMode();
+    }
 }
 
+
 int main(){
-    // uart_init();
-    // stdout = &uart_output;
-    // stdin = &uart_input;
+    uart_init();
+    stdout = &uart_output;
+    stdin = &uart_input;
     //cli();
-    setupTimer();
-    DDRA = 0xff;
-    Roomba_Init();
-    init_uart_bt();
-    Servo_Init();
-    receive_byte();
+    config();
+    for(;;){
+        printf("sensor value: %d\n",readADC(8));
+    }
+    
+
+    // setupTimer();
+    // DDRA = 0xff;
+    // Roomba_Init();
+    // init_uart_bt();
+    // Servo_Init();
+    // receive_byte();
     // cli();
     // OS_Init();
     // setupTimer();
