@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include "base_station.h"
 #include "os.h"
-//#include "avr_console.h"
+#include "avr_console.h"
 #include "./roomba/roomba.h"
 #include "./uart/uart.h"
 
@@ -33,8 +33,10 @@ void config(){
     DDRK &= ~(1 << DDK4);
     //set pin mode input for Analog A13
     DDRK &= ~(1 << DDK5);
-    //set digital input 50 to low
-    PORTD &= ~(1 << PORTD7);
+    
+    //set sensor
+    DDRB |= (0<<DDB3);
+    PORTB |= (1<<PORTB3);
     
     initADC();
 }
@@ -100,47 +102,15 @@ void RommbaControl(){
                 //foward  
                Bluetooth_Send_Byte('q');
              }
-        }
+        
     
-        //read laser
-        laser = (PINB & _BV(PB1)) ? 0 : 1;
-        Bluetooth_Send_Byte(laser);
-}
-
-void ServoControl(){
-    for(;;){
-        rx_servo = readADC(X_servo);
-        ry_servo =  readADC(Y_servo);
-        //uint8_t x = 3;
-        //Bluetooth_Send_Byte('l');
-        //stop
-        
-        if (rx_servo>503-20 && rx_servo<503+20 && ry_servo>521-20 && ry_servo<521+20){
-            Bluetooth_Send_Byte('1');
-        }else{
-             if(rx_servo<300){
-               //left
-                Bluetooth_Send_Byte('9');
-             }else if(rx_servo>700){
-               //right 
-                //Roomba_Drive(50, -1);
-                Bluetooth_Send_Byte('3');
-             }
-             if(ry_servo>800){
-               //backward
-               Bluetooth_Send_Byte('m');
-               //Roomba_Drive(100, 32768);
-             }else if(ry_servo<300){
-                //foward  
-               Bluetooth_Send_Byte('5');
-               //Roomba_Drive(-100, 32768);
-             }
-         }
-        
+            laser = (PINB & _BV(PB3)) ? '0' : '1' ;
+            Bluetooth_Send_Byte(laser);
     }
+    
         
-}
 
+}
 
 
 
@@ -160,6 +130,14 @@ int main()
    //cli();
    //OS_Init();
    config();
+    //read laser
+    /*
+    for(;;){
+        laser = (PINB & _BV(PB3)) ? 0 : 1 ;
+        printf("laser value %d\n", laser);
+    }*/
+    
+    //Bluetooth_Send_Byte(laser);
    RommbaControl();
    //Task_Create_System(RommbaControl, 1);
    //Task_Create_RR(dummy,1);
