@@ -41,6 +41,7 @@ void config(){
     initADC();
 }
 
+
 uint16_t readADC(uint8_t channel) {
 	ADMUX = (ADMUX & 0xE0 ) | (0x07 & channel);
 	ADCSRB = (ADCSRB & 0xF7) | (channel & (1 << MUX5));
