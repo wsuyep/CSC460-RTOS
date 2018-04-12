@@ -75,6 +75,14 @@ void OS_Abort(unsigned int error){
     
   }
 }
+
+TICK getTicks(){
+  return ticks;
+}
+
+unsigned int Now(){
+  return ticks*10;
+}
 /********************************************************************************
 *			OS (Kernel methods)
 *********************************************************************************/
@@ -347,7 +355,7 @@ void OS_Start()
 {   
    if ( (! KernelActive) && (Tasks > 0)) {
        Disable_Interrupt();
-       printf("-------STARTING OS--------\n\n\n");
+       //printf("-------STARTING OS--------\n\n\n");
       /* we may have to initialize the interrupt vector for Enter_Kernel() here. */
 
       /* here we go...  */
