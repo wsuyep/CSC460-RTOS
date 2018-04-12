@@ -101,7 +101,6 @@ void setupTimer(){
     TCNT4 = 0;
 
     sei();
-
 }
 
 static unsigned int ItemsInQ(struct Queue * queue){
@@ -222,7 +221,7 @@ static PD *GetFirstNonBlockPeriodicProcess(){
     PD * readyTask = NULL;
     while(curr != NULL){
       counter++;
-      printf("%d. pid: %d tick: %d offset: %d period: %d   (tick-offset) mod (period): %d\n",counter,curr->pid,ticks,curr->offset,curr->period,(ticks - curr->offset)%curr->period);
+      //printf("%d. pid: %d tick: %d offset: %d period: %d   (tick-offset) mod (period): %d\n",counter,curr->pid,ticks,curr->offset,curr->period,(ticks - curr->offset)%curr->period);
       if((ticks - curr->offset)%curr->period == 0){
         readyTask = curr;
         readyCount ++;
@@ -253,19 +252,19 @@ static void Dispatch()
       cp = GetFirstNonBlockProcess(&SystemProcess);
       if(cp){
         counter++;
-        printf("%d.Selected new system task: %d\n",counter,cp->pid);
+        // printf("%d.Selected new system task: %d\n",counter,cp->pid);
         break;
       }
       cp = GetFirstNonBlockPeriodicProcess();
       if(cp) {
         counter++;
-        printf("%d.Selected new periodic task: %d\n",counter, cp->pid);
+        // printf("%d.Selected new periodic task: %d\n",counter, cp->pid);
         break;
       }
       cp = GetFirstNonBlockProcess(&RoundRobinProcess);
       if(cp) {
         counter++;
-        printf("%d.Selected new RR task: %d\n",counter,cp->pid);
+        // printf("%d.Selected new RR task: %d\n",counter,cp->pid);
         break;
       }
     }

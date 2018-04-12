@@ -157,15 +157,6 @@ void Roomba_ChangeState(ROOMBA_STATE newState)
 	_delay_ms(20);
 }*/
 
-void Roomba_Drive( int16_t velocity, int16_t radius )
-{
-	uart_send_byte(DRIVE);
-	uart_send_byte(HIGH_BYTE(velocity));
-	uart_send_byte(LOW_BYTE(velocity));
-	uart_send_byte(HIGH_BYTE(radius));
-	uart_send_byte(LOW_BYTE(radius));
-}
-
 /**
  * Update the LEDs on the Roomba to match the configured state
  */
