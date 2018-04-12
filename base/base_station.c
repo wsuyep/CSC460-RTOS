@@ -28,8 +28,14 @@ void config(){
     DDRK &= ~(1 << DDK2);
     //set pin mode input for Analog A11
     DDRK &= ~(1 << DDK3);
+    
+    //set pin mode input for Analog A12 
+    DDRK &= ~(1 << DDK4);
+    //set pin mode input for Analog A13
+    DDRK &= ~(1 << DDK5);
     //set digital input 50 to low
     PORTD &= ~(1 << PORTD7);
+    
     initADC();
 }
 
@@ -49,6 +55,8 @@ void RommbaControl(){
     for(;;){
         rx = readADC(X);
         ry = readADC(Y);
+        rx_servo = readADC(X_servo);
+        ry_servo =  readADC(Y_servo);
         //uint8_t x = 3;
         //Bluetooth_Send_Byte('l');
         //stop
@@ -64,35 +72,100 @@ void RommbaControl(){
                 Bluetooth_Send_Byte('r');
              }
              if(ry>800){
-               //forward
+               //backward
                Bluetooth_Send_Byte('b');
                //Roomba_Drive(100, 32768);
              }else if(ry<300){
-               //backward  
+               //foward  
                Bluetooth_Send_Byte('f');
                //Roomba_Drive(-100, 32768);
              }
          }
         
+        
+        //servo
+
+        if(rx_servo<300){
+               //left
+                Bluetooth_Send_Byte('z');
+             }else if(rx_servo>700){
+               //right 
+                //Roomba_Drive(50, -1);
+                Bluetooth_Send_Byte('y');
+             }
+             if(ry_servo>800){
+               //backward
+               Bluetooth_Send_Byte('h');
+             }else if(ry_servo<300){
+                //foward  
+               Bluetooth_Send_Byte('q');
+             }
+        }
+    
+        //read laser
+        laser = (PINB & _BV(PB1)) ? 0 : 1;
+        Bluetooth_Send_Byte(laser);
+}
+
+void ServoControl(){
+    for(;;){
+        rx_servo = readADC(X_servo);
+        ry_servo =  readADC(Y_servo);
+        //uint8_t x = 3;
+        //Bluetooth_Send_Byte('l');
+        //stop
+        
+        if (rx_servo>503-20 && rx_servo<503+20 && ry_servo>521-20 && ry_servo<521+20){
+            Bluetooth_Send_Byte('1');
+        }else{
+             if(rx_servo<300){
+               //left
+                Bluetooth_Send_Byte('9');
+             }else if(rx_servo>700){
+               //right 
+                //Roomba_Drive(50, -1);
+                Bluetooth_Send_Byte('3');
+             }
+             if(ry_servo>800){
+               //backward
+               Bluetooth_Send_Byte('m');
+               //Roomba_Drive(100, 32768);
+             }else if(ry_servo<300){
+                //foward  
+               Bluetooth_Send_Byte('5');
+               //Roomba_Drive(-100, 32768);
+             }
+         }
+        
     }
+        
 }
 
 
+
+
+void dummy(){
+    for(;;){
+        
+    }
+}
 
 int main() 
 {
    //Roomba_Init();
    init_uart_bt();
-//   uart_init();
-//   stdout = &uart_output;
-//   stdin = &uart_input;
-  // cli();
+   //uart_init();
+   //stdout = &uart_output;
+   //stdin = &uart_input;
+   //cli();
    //OS_Init();
-
    config();
    RommbaControl();
-    
-//   sei();
-  // OS_Start();
+   //Task_Create_System(RommbaControl, 1);
+   //Task_Create_RR(dummy,1);
+   //Task_Create_Period(ServoControl, 1, 4, 1, 0);
+   //setupTimer();
+   //sei();
+   //OS_Start();
    return 0;
 }

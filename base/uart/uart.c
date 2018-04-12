@@ -166,7 +166,7 @@ void init_uart_bt(){
     
     UBRR1H = 0;
     
-    UBRR1L = 103;
+    UBRR1L = (((F_CPU / (38400 * 16UL))) - 1);
 }
 
 void Bluetooth_Send_Byte(uint8_t data_out){

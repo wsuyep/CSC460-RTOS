@@ -658,7 +658,7 @@ ISR(TIMER4_COMPA_vect){
   ticks++;
   //counter++;
   //printf("INSIDE INTERRUPT SP:%p%p\n",cp->sp,cp->sp +1);
-  //printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
+  printf("%d.Entering timer interrupt, cp id: %d sp: %d\n",counter,cp->pid,cp->sp);
   //printf("number of: %d\n",ItemsInQ(&PeriodicProcess));
 
   if (KernelActive && cp->priority != 3) {
